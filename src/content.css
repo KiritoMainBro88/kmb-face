@@ -1,0 +1,33 @@
+html.fbis-picking-post,
+html.fbis-picking-post * {
+  cursor: crosshair !important;
+}
+
+.fbis-post-hover {
+  outline: 4px solid #0866ff !important;
+  outline-offset: 4px !important;
+  border-radius: 10px !important;
+}
+
+html.fbis-silent-scan [role="dialog"]:has(img[data-visualcompletion="media-vc-image"]),
+html.fbis-silent-scan [role="dialog"]:has(img[src*="fbcdn.net"]) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+#fbis-extension-root {
+  all: initial;
+  position: fixed;
+  z-index: 2147483647;
+  right: 14px;
+  bottom: 14px;
+}
+
+.fbis-verified-badge {
+  display: inline-block !important;
+  width: 16px !important;
+  height: 16px !important;
+  margin-left: 4px !important;
+  vertical-align: -3px !important;
+  flex: 0 0 auto !important;
+}

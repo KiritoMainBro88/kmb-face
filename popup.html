@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Facebook Post Image Saver</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      * { box-sizing: border-box; }
+      html, body { width: 280px; min-width: 280px; margin: 0; background: #121418; color: #f5f7fb; }
+      body { min-height: 320px; padding: 16px; }
+      h1 { margin: 0; font-size: 16px; line-height: 1.25; }
+      .sub { margin: 4px 0 16px; color: #8e96a3; font-size: 11px; }
+      .card { overflow: hidden; border: 1px solid rgba(255,255,255,.09); border-radius: 14px; background: #1b1e24; }
+      .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 10px 12px; }
+      .row + .row { border-top: 1px solid rgba(255,255,255,.07); }
+      .copy { min-width: 0; font-size: 12px; font-weight: 650; line-height: 1.3; }
+      .hint { display: block; margin-top: 3px; color: #858d99; font-size: 10px; font-weight: 500; }
+      .switch { position: relative; width: 38px; height: 22px; flex: 0 0 38px; }
+      .switch input { position: absolute; opacity: 0; pointer-events: none; }
+      .track { position: absolute; inset: 0; border-radius: 999px; background: #3a3f48; transition: background .15s ease; cursor: pointer; }
+      .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s ease; }
+      .switch input:checked + .track { background: #0866ff; }
+      .switch input:checked + .track::after { transform: translateX(16px); }
+      .switch input:focus-visible + .track { outline: 2px solid #75aaff; outline-offset: 2px; }
+      .mode { margin-top: 12px; }
+      .mode-title { margin: 0 0 7px; color: #aeb5c2; font-size: 11px; font-weight: 700; }
+      .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 11px; background: #1b1e24; border: 1px solid rgba(255,255,255,.09); }
+      .segmented label { position: relative; }
+      .segmented input { position: absolute; opacity: 0; pointer-events: none; }
+      .segmented span { display: grid; min-height: 34px; place-items: center; border-radius: 8px; color: #aeb5c2; font-size: 11px; font-weight: 750; cursor: pointer; }
+      .segmented input:checked + span { background: #2c3139; color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+      .segmented input:focus-visible + span { outline: 2px solid #75aaff; outline-offset: 1px; }
+      .status { min-height: 16px; margin: 10px 1px 0; color: #62d58b; font-size: 10px; text-align: right; opacity: 0; transition: opacity .15s ease; }
+      .status.show { opacity: 1; }
+      .status.error { color: #ff8a8a; }
+      .diagnostics { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; }
+      .diagnostics button { min-height: 34px; border: 1px solid rgba(255,255,255,.09); border-radius: 9px; background: #20242b; color: #e8ebf0; font-size: 10px; font-weight: 700; cursor: pointer; }
+      .diagnostics button:hover { background: #292e37; }
+      .diagnostics button:focus-visible { outline: 2px solid #75aaff; outline-offset: 1px; }
+    </style>
+  </head>
+  <body>
+    <h1>Facebook Post Image Saver</h1>
+    <p class="sub">Cài đặt V1.0</p>
+
+    <section class="card" aria-label="Tùy chọn">
+      <label class="row">
+        <span class="copy">Xác nhận trước khi Like bài viết</span>
+        <span class="switch"><input id="like-confirm" type="checkbox" /><span class="track"></span></span>
+      </label>
+      <label class="row">
+        <span class="copy">Tích xanh trang trí<span class="hint">Chỉ hiển thị trên trình duyệt này</span></span>
+        <span class="switch"><input id="cosmetic-badge" type="checkbox" /><span class="track"></span></span>
+      </label>
+      <label class="row">
+        <span class="copy">Tải kèm post_info.txt</span>
+        <span class="switch"><input id="post-info" type="checkbox" /><span class="track"></span></span>
+      </label>
+    </section>
+
+    <section class="mode" aria-label="Chế độ tải mặc định">
+      <p class="mode-title">Chế độ tải mặc định</p>
+      <div class="segmented">
+        <label><input type="radio" name="download-mode" value="zip" /><span>ZIP</span></label>
+        <label><input type="radio" name="download-mode" value="manager" /><span>IDM Direct</span></label>
+      </div>
+    </section>
+
+    <div class="diagnostics" aria-label="Chẩn đoán lỗi">
+      <button id="copy-logs" type="button">📋 Copy Logs</button>
+      <button id="report-bug" type="button">🐛 Báo lỗi (GitHub)</button>
+    </div>
+    <p id="status" class="status" role="status" aria-live="polite">Đã lưu</p>
+    <script src="src/logger.js"></script>
+    <script src="src/popup.js"></script>
+  </body>
+</html>

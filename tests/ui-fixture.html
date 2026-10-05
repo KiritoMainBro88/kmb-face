@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Facebook Image Saver UI Fixture</title>
+    <link rel="stylesheet" href="../src/content.css">
+    <style>
+      :root { color-scheme: dark; font-family: "Segoe UI", sans-serif; }
+      body { min-height: 100vh; margin: 0; background: #18191a; color: #e4e6eb; }
+      .topbar { height: 56px; border-bottom: 1px solid #393a3b; background: #242526; }
+      .feed { width: min(680px, calc(100% - 32px)); margin: 28px auto; }
+      .post { overflow: hidden; border: 1px solid #3a3b3c; border-radius: 14px; background: #242526; }
+      .post-copy { padding: 16px; }
+      .post-copy strong { display: block; }
+      .post-copy p { margin: 7px 0 0; color: #b0b3b8; }
+      .tiles { display: grid; grid-template-columns: 1fr 1fr; height: 430px; gap: 2px; background: #111; }
+      .tile { position: relative; display: grid; place-items: center; background: #e9edf3; color: #20242b; font-size: 28px; font-weight: 800; text-decoration: none; }
+      .tile:last-child::after { content: attr(data-overlay); position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.52); color: #fff; font-size: 44px; }
+      .viewer { display: none; position: fixed; inset: 56px 0 0; grid-template-columns: minmax(0, 1fr) 360px; background: #08090a; }
+      .viewer.is-open { display: grid; }
+      .media-pane { position: relative; display: grid; place-items: center; overflow: hidden; }
+      .media-image { display: block; width: min(86%, 900px); aspect-ratio: 16/10; border-radius: 4px; background: linear-gradient(145deg, #f8fafc, #ccd5e2); object-fit: cover; }
+      .next { position: absolute; top: 0; right: 0; width: 44px; height: 100%; border: 0; background: rgba(255,255,255,.04); color: white; cursor: pointer; }
+      .sidebar { padding: 24px; border-left: 1px solid #2f3032; background: #242526; }
+      .sidebar h2 { margin-top: 0; }
+      @media (max-width: 800px) { .viewer { grid-template-columns: 1fr; } .sidebar { display: none; } }
+    </style>
+    <script>
+      window.__fixtureListeners = [];
+      const fixtureAttachShadow = Element.prototype.attachShadow;
+      Element.prototype.attachShadow = function attachOpenShadowForTest(init) {
+        return fixtureAttachShadow.call(this, { ...init, mode: "open" });
+      };
+      window.chrome = {
+        runtime: {
+          getURL(path) {
+            return new URL(`../${path}`, location.href).href;
+          },
+          onMessage: {
+            addListener(listener) {
+              window.__fixtureListeners.push(listener);
+            }
+          },
+          async sendMessage(message) {
+            if (message.type === "FBIS_DOWNLOAD_IMAGES") {
+              return { ok: true, started: message.images.length, failed: 0 };
+            }
+            return { ok: true };
+          }
+        }
+      };
+    </script>
+  </head>
+  <body>
+    <div class="topbar"></div>
+    <main class="feed">
+      <div class="post" role="dialog" aria-label="Bài viết của Lavanya Yadav Roychowdhury">
+        <div class="post-copy">
+          <strong>Lavanya Yadav Roychowdhury</strong>
+          <p>#MAS291 12H50 FE HOLA HCM IB Lò Văn Lụm</p>
+        </div>
+        <div class="tiles">
+          <a class="tile" href="https://www.facebook.com/photo/?fbid=100&set=pcb.999">Question 1</a>
+          <a class="tile" href="https://www.facebook.com/photo/?fbid=101&set=pcb.999">Question 2</a>
+          <a class="tile" data-overlay="+4" href="https://www.facebook.com/photo/?fbid=102&set=pcb.999">+4</a>
+        </div>
+      </div>
+    </main>
+
+    <section class="viewer" aria-label="Trình xem ảnh thử nghiệm">
+      <div class="media-pane" role="main">
+        <img class="media-image" data-visualcompletion="media-vc-image" alt="Ảnh câu hỏi thử nghiệm">
+        <div class="next" role="button" aria-label="Ảnh tiếp theo" tabindex="0">›</div>
+      </div>
+      <aside class="sidebar"><h2>Lavanya Yadav Roychowdhury</h2><p>Ảnh này nằm trong một bài viết.</p></aside>
+    </section>
+
+    <script>
+      const fixturePost = document.querySelector(".post");
+      const fixtureViewer = document.querySelector(".viewer");
+      const fixtureImage = document.querySelector(".media-image");
+      const fixtureNext = document.querySelector(".next");
+      let fixtureIndex = 0;
+      const requestedTotal = Number.parseInt(new URLSearchParams(location.search).get("count"), 10);
+      const fixtureTotal = Number.isFinite(requestedTotal) && requestedTotal >= 3 ? requestedTotal : 6;
+      const fixtureOverlay = fixturePost.querySelector(".tile:last-child");
+      fixtureOverlay.textContent = `+${fixtureTotal - 2}`;
+      fixtureOverlay.dataset.overlay = `+${fixtureTotal - 2}`;
+
+      Object.defineProperties(fixtureImage, {
+        complete: { configurable: true, get: () => true },
+        naturalWidth: { configurable: true, get: () => 1800 },
+        naturalHeight: { configurable: true, get: () => 1125 },
+        currentSrc: {
+          configurable: true,
+          get: () => `https://www.facebook.com/mock-images/question-${fixtureIndex + 1}.jpg`
+        }
+      });
+      fixtureImage.decode = () => Promise.resolve();
+
+      function showFixturePhoto(index) {
+        fixtureIndex = index;
+        fixtureImage.alt = `Ảnh câu hỏi thử nghiệm ${index + 1}`;
+        fixtureImage.dataset.fixtureIndex = String(index);
+        history.replaceState({}, "", `/photo/?fbid=${100 + index}&set=pcb.999`);
+        fixturePost.style.display = "none";
+        fixtureViewer.classList.add("is-open");
+      }
+
+      for (const link of fixturePost.querySelectorAll('a[href*="/photo/"]')) {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          showFixturePhoto(0);
+        });
+      }
+      fixtureNext.addEventListener("click", () => showFixturePhoto((fixtureIndex + 1) % fixtureTotal));
+    </script>
+    <script src="../lib/fflate.min.js"></script>
+    <script src="../src/collector.js"></script>
+    <script src="../src/content.js"></script>
+    <script>
+      setTimeout(() => {
+        for (const listener of window.__fixtureListeners) {
+          listener({ type: "FBIS_TOGGLE_PANEL" }, {}, () => undefined);
+        }
+      }, 100);
+    </script>
+  </body>
+</html>
