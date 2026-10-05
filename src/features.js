@@ -4,11 +4,13 @@
   const STORY_HOST_ID = "fbis-story-download-root";
   const LIKE_POPOVER_ID = "fbis-like-confirm-root";
   const BADGE_CLASS = "fbis-verified-badge";
+  const HIDDEN_FEED_CLASS = "fbis-hidden-feed-item";
   const DiagnosticLogger = globalScope.FBISLogger;
   const LIKE_CONFIRM_WINDOW_MS = 3000;
   const DEFAULT_SETTINGS = Object.freeze({
     fbis_enable_like_confirm: true,
-    fbis_enable_cosmetic_badge: true
+    fbis_enable_cosmetic_badge: true,
+    fbis_clean_feed: true
   });
   const featureSettings = { ...DEFAULT_SETTINGS };
   const pendingLikeControls = new WeakMap();
@@ -66,7 +68,8 @@
   function normalizeFeatureSettings(value = {}) {
     return {
       fbis_enable_like_confirm: value.fbis_enable_like_confirm !== false,
-      fbis_enable_cosmetic_badge: value.fbis_enable_cosmetic_badge !== false
+      fbis_enable_cosmetic_badge: value.fbis_enable_cosmetic_badge !== false,
+      fbis_clean_feed: value.fbis_clean_feed !== false
     };
   }
 
@@ -76,6 +79,55 @@
 
   function isCosmeticBadgeEnabled(settings = featureSettings) {
     return settings?.fbis_enable_cosmetic_badge !== false;
+  }
+
+  function isCleanFeedEnabled(settings = featureSettings) {
+    return settings?.fbis_clean_feed !== false;
+  }
+
+  function isSponsoredRedirectHref(value) {
+    if (!value) return false;
+    try {
+      const parsed = new URL(value, "https://www.facebook.com/");
+      if (!/(^|\.)facebook\.com$/i.test(parsed.hostname)) return false;
+      return (
+        /\/(?:ads|ad_center|adsmanager)(?:\/|$)/i.test(parsed.pathname) ||
+        parsed.searchParams.has("ad_id") ||
+        parsed.searchParams.has("sponsored")
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function isSponsoredOrSuggestedPost(article) {
+    if (!article) return false;
+    const text = normalizeName(article.textContent).toLowerCase();
+    if (
+      /(?:được tài trợ|sponsored|gợi ý cho bạn|suggested for you|reels và video ngắn)/i.test(text)
+    ) {
+      return true;
+    }
+    const links = article.querySelectorAll?.("a[href]") || [];
+    for (const link of links) {
+      if (isSponsoredRedirectHref(link.getAttribute?.("href") || link.href)) return true;
+    }
+    return false;
+  }
+
+  function applyCleanFeed() {
+    if (!globalScope.document) return;
+    if (!isCleanFeedEnabled()) {
+      document.querySelectorAll(`.${HIDDEN_FEED_CLASS}`).forEach((node) => {
+        node.classList.remove(HIDDEN_FEED_CLASS);
+      });
+      return;
+    }
+
+    for (const article of document.querySelectorAll('div[role="article"]')) {
+      if (article.parentElement?.closest?.('div[role="article"]')) continue;
+      article.classList.toggle(HIDDEN_FEED_CLASS, isSponsoredOrSuggestedPost(article));
+    }
   }
 
   function ensureMainWorldBridge() {
@@ -438,6 +490,10 @@
         changes.fbis_enable_cosmetic_badge.newValue !== false;
       shouldRescanBadges = true;
     }
+    if (changes.fbis_clean_feed) {
+      featureSettings.fbis_clean_feed = changes.fbis_clean_feed.newValue !== false;
+      applyCleanFeed();
+    }
 
     if (shouldRescanBadges) {
       if (!featureSettings.fbis_enable_cosmetic_badge) removeCosmeticBadges();
@@ -459,6 +515,7 @@
         installStoryButton();
       }
       applyCosmeticBadges();
+      applyCleanFeed();
     }, 180);
   }
 
@@ -469,6 +526,7 @@
     lastKnownUrl = location.href;
     installStoryButton();
     applyCosmeticBadges();
+    applyCleanFeed();
     document.addEventListener("click", handleLikeCapture, true);
     globalScope.addEventListener("popstate", scheduleUtilityScan);
     globalScope.chrome?.storage?.onChanged?.addListener(handleFeatureSettingsChanged);
@@ -485,11 +543,14 @@
     extractStoryId,
     findStoryContainer,
     isCosmeticBadgeEnabled,
+    isCleanFeedEnabled,
     isLikeConfirmationEnabled,
     isLikeControl,
     isLikeLabel,
     isPauseLabel,
     isPlayLabel,
+    isSponsoredOrSuggestedPost,
+    isSponsoredRedirectHref,
     isStoryLocation,
     normalizeFeatureSettings,
     normalizeName

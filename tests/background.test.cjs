@@ -14,9 +14,19 @@ const {
   getTrustedImageExtension,
   isFacebookPage,
   isHostOrSubdomain,
+  semverCompare,
   validateImage,
   validateVideo
 } = require("../src/background.js");
+
+test("semverCompare orders stable and prerelease versions", () => {
+  assert.equal(semverCompare("v1.1.0", "1.0.9"), 1);
+  assert.equal(semverCompare("1.1.0", "v1.1.0"), 0);
+  assert.equal(semverCompare("1.1.0-beta.2", "1.1.0-beta.10"), -1);
+  assert.equal(semverCompare("1.1.0", "1.1.0-rc.1"), 1);
+  assert.equal(semverCompare("2.0.0", "10.0.0"), -1);
+  assert.throws(() => semverCompare("latest", "1.0.0"), TypeError);
+});
 
 test("background media transport encodes binary bytes as base64", () => {
   const buffer = Uint8Array.from([0, 1, 2, 255]).buffer;
@@ -68,7 +78,7 @@ test("download filenames only use trusted extensions and safe folder ids", () =>
 
 test("video validation accepts signed Facebook CDN streams and rejects unsafe origins", () => {
   const signed = "https://video.fsgn19-1.fna.fbcdn.net/o1/v/t2/f2/m69/video.mp4?oh=signed";
-  assert.deepEqual(validateVideo({ url: signed }, 0), { url: signed, extension: "mp4" });
+  assert.deepEqual(validateVideo({ url: signed }, 0), { url: signed, extension: "mp4", filename: "" });
   assert.throws(() => validateVideo({ url: "blob:https://www.facebook.com/abc" }, 0));
   assert.throws(() => validateVideo({ url: "https://fbcdn.net.evil.example/video.mp4" }, 0));
 });

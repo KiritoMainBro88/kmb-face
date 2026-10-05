@@ -1,7 +1,7 @@
 # kmb-face
 
 [![License GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-v1.0.0-0a7cff.svg)
+![Version](https://img.shields.io/badge/version-v1.1.0-0a7cff.svg)
 ![Node tests](https://img.shields.io/github/actions/workflow/status/KiritoMainBro88/kmb-face/ci.yml?branch=main&label=Node%20tests)
 ![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-34A853.svg)
 
@@ -25,6 +25,9 @@ Sau khi cập nhật extension thủ công, bấm **Reload** trong `chrome://ext
 - **Like Confirmation**: cơ chế two-step click trong 3 giây để hạn chế bấm nhầm Like.
 - **Fake Badge / Cosmetic Verified Badge**: tích xanh trang trí client-side chỉ hiển thị trong trình duyệt của bạn.
 - **Settings Popup**: bật/tắt Like Confirmation, Cosmetic Badge, `post_info.txt`, và chọn ZIP hoặc IDM Direct làm chế độ mặc định.
+- **Auto-Update Checker**: kiểm tra GitHub Releases mỗi 12 giờ, hiển thị badge `NEW` và banner tải bản mới trong popup.
+- **Clean Feed**: mặc định ẩn bài `Sponsored` / `Được tài trợ`, `Suggested for you` / `Gợi ý cho bạn` và `Reels và video ngắn`; có thể tắt trong popup.
+- **Custom Filename Template**: đặt mẫu tên file với `{author}`, `{postId}`, `{index}` và `{date}` cho media tải trực tiếp và file media trong ZIP.
 - **Diagnostic Reporter**: ring logger 50 sự kiện gần nhất, tự khử `fb_dtsg`, `c_user`, session ID và cookie/authorization trước khi copy hoặc mở GitHub Issue.
 
 ## Cách dùng nhanh
@@ -51,7 +54,9 @@ Reporter không tự đính kèm cookie hoặc credential Facebook.
 - `downloads`: tải ZIP/MP4 hoặc gửi media URL qua Chrome download pipeline.
 - `clipboardWrite`: Copy link HD và Copy Logs.
 - `storage`: lưu các tùy chọn trong popup bằng `chrome.storage.local`.
+- `alarms`: chạy kiểm tra cập nhật tự động mỗi 12 giờ.
 - `host_permissions` cho `facebook.com`, `fbcdn.net`, `fbsbx.com`: chạy content script và fetch media từ các host Facebook cần thiết.
+- `host_permissions` cho `api.github.com`: đọc GitHub Release mới nhất để kiểm tra cập nhật.
 
 Extension không yêu cầu quyền `cookies` hoặc `webRequest`.
 

@@ -1,17 +1,19 @@
 {
   "manifest_version": 3,
   "name": "Facebook Post Image Saver",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Tải ảnh, video HD và Reels từ bài viết Facebook; hỗ trợ ZIP, IDM/FDM và copy link.",
   "permissions": [
     "downloads",
     "clipboardWrite",
-    "storage"
+    "storage",
+    "alarms"
   ],
   "host_permissions": [
     "https://*.facebook.com/*",
     "https://*.fbcdn.net/*",
-    "https://*.fbsbx.com/*"
+    "https://*.fbsbx.com/*",
+    "https://api.github.com/*"
   ],
   "action": {
     "default_title": "Facebook Post Image Saver",
@@ -24,7 +26,7 @@
     {
       "matches": ["https://*.facebook.com/*"],
       "css": ["src/content.css"],
-      "js": ["src/logger.js", "lib/fflate.min.js", "src/collector.js", "src/content.js", "src/features.js"],
+      "js": ["src/logger.js", "src/naming.js", "lib/fflate.min.js", "src/collector.js", "src/content.js", "src/features.js"],
       "run_at": "document_idle"
     }
   ],

@@ -11,6 +11,9 @@
       body { min-height: 320px; padding: 16px; }
       h1 { margin: 0; font-size: 16px; line-height: 1.25; }
       .sub { margin: 4px 0 16px; color: #8e96a3; font-size: 11px; }
+      .update-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 12px; padding: 10px 11px; border: 1px solid rgba(228,30,63,.55); border-radius: 11px; background: rgba(228,30,63,.13); font-size: 11px; font-weight: 700; }
+      .update-banner[hidden] { display: none; }
+      .update-banner button { flex: 0 0 auto; border: 0; border-radius: 8px; padding: 6px 8px; background: #e41e3f; color: #fff; font-size: 10px; font-weight: 800; cursor: pointer; }
       .card { overflow: hidden; border: 1px solid rgba(255,255,255,.09); border-radius: 14px; background: #1b1e24; }
       .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 10px 12px; }
       .row + .row { border-top: 1px solid rgba(255,255,255,.07); }
@@ -31,6 +34,11 @@
       .segmented span { display: grid; min-height: 34px; place-items: center; border-radius: 8px; color: #aeb5c2; font-size: 11px; font-weight: 750; cursor: pointer; }
       .segmented input:checked + span { background: #2c3139; color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
       .segmented input:focus-visible + span { outline: 2px solid #75aaff; outline-offset: 1px; }
+      .advanced { margin-top: 12px; }
+      .field { display: block; padding: 10px 12px; border: 1px solid rgba(255,255,255,.09); border-radius: 11px; background: #1b1e24; }
+      .field span { display: block; margin-bottom: 6px; color: #aeb5c2; font-size: 10px; font-weight: 700; }
+      .field input { width: 100%; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 7px 8px; background: #111318; color: #f5f7fb; font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; outline: none; }
+      .field input:focus { border-color: #75aaff; box-shadow: 0 0 0 2px rgba(117,170,255,.16); }
       .status { min-height: 16px; margin: 10px 1px 0; color: #62d58b; font-size: 10px; text-align: right; opacity: 0; transition: opacity .15s ease; }
       .status.show { opacity: 1; }
       .status.error { color: #ff8a8a; }
@@ -42,7 +50,12 @@
   </head>
   <body>
     <h1>Facebook Post Image Saver</h1>
-    <p class="sub">Cài đặt V1.0</p>
+    <p class="sub">Cài đặt V1.1</p>
+
+    <section id="update-banner" class="update-banner" hidden aria-live="polite">
+      <span>🎉 Đã có bản mới (<strong id="update-version"></strong>)</span>
+      <button id="update-download" type="button">Tải ngay</button>
+    </section>
 
     <section class="card" aria-label="Tùy chọn">
       <label class="row">
@@ -57,6 +70,10 @@
         <span class="copy">Tải kèm post_info.txt</span>
         <span class="switch"><input id="post-info" type="checkbox" /><span class="track"></span></span>
       </label>
+      <label class="row">
+        <span class="copy">Clean Feed<span class="hint">Ẩn bài Tài trợ &amp; Gợi ý</span></span>
+        <span class="switch"><input id="clean-feed" type="checkbox" /><span class="track"></span></span>
+      </label>
     </section>
 
     <section class="mode" aria-label="Chế độ tải mặc định">
@@ -67,12 +84,20 @@
       </div>
     </section>
 
+    <section class="advanced" aria-label="Cài đặt nâng cao">
+      <label class="field" for="filename-template">
+        <span>Tên file: {author} · {postId} · {index} · {date}</span>
+        <input id="filename-template" type="text" maxlength="180" spellcheck="false" />
+      </label>
+    </section>
+
     <div class="diagnostics" aria-label="Chẩn đoán lỗi">
       <button id="copy-logs" type="button">📋 Copy Logs</button>
       <button id="report-bug" type="button">🐛 Báo lỗi (GitHub)</button>
     </div>
     <p id="status" class="status" role="status" aria-live="polite">Đã lưu</p>
     <script src="src/logger.js"></script>
+    <script src="src/naming.js"></script>
     <script src="src/popup.js"></script>
   </body>
 </html>

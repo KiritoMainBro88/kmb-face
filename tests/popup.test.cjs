@@ -20,13 +20,17 @@ test("popup settings preserve disabled toggles and IDM Direct mode", () => {
       fbis_enable_like_confirm: false,
       fbis_enable_cosmetic_badge: false,
       fbis_include_post_info: false,
-      fbis_default_download_mode: "manager"
+      fbis_default_download_mode: "manager",
+      fbis_clean_feed: false,
+      fbis_filename_template: "{date}_{author}_{index}"
     }),
     {
       fbis_enable_like_confirm: false,
       fbis_enable_cosmetic_badge: false,
       fbis_include_post_info: false,
-      fbis_default_download_mode: "manager"
+      fbis_default_download_mode: "manager",
+      fbis_clean_feed: false,
+      fbis_filename_template: "{date}_{author}_{index}"
     }
   );
 });

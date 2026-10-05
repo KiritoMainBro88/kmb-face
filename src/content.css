@@ -31,3 +31,6 @@ html.fbis-silent-scan [role="dialog"]:has(img[src*="fbcdn.net"]) {
   vertical-align: -3px !important;
   flex: 0 0 auto !important;
 }
+.fbis-hidden-feed-item {
+  display: none !important;
+}

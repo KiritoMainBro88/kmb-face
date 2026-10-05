@@ -10,6 +10,8 @@ const {
   isLikeLabel,
   isPauseLabel,
   isPlayLabel,
+  isSponsoredOrSuggestedPost,
+  isSponsoredRedirectHref,
   isStoryLocation,
   normalizeFeatureSettings,
   normalizeName
@@ -41,9 +43,30 @@ test("Like confirmation flag is enabled by default and can be disabled", () => {
 test("feature settings normalize storage values and cosmetic badge toggle", () => {
   assert.deepEqual(normalizeFeatureSettings({}), {
     fbis_enable_like_confirm: true,
-    fbis_enable_cosmetic_badge: true
+    fbis_enable_cosmetic_badge: true,
+    fbis_clean_feed: true
   });
   assert.equal(isCosmeticBadgeEnabled({ fbis_enable_cosmetic_badge: false }), false);
+});
+
+test("Clean Feed recognizes sponsored and suggested feed items", () => {
+  const article = (textContent, hrefs = []) => ({
+    textContent,
+    querySelectorAll(selector) {
+      if (selector !== "a[href]") return [];
+      return hrefs.map((href) => ({ getAttribute: () => href, href }));
+    }
+  });
+
+  assert.equal(isSponsoredOrSuggestedPost(article("Bài viết · Được tài trợ")), true);
+  assert.equal(isSponsoredOrSuggestedPost(article("Suggested for you")), true);
+  assert.equal(isSponsoredOrSuggestedPost(article("Reels và video ngắn")), true);
+  assert.equal(
+    isSponsoredOrSuggestedPost(article("Bài viết bình thường", ["https://www.facebook.com/ads/about/"])),
+    true
+  );
+  assert.equal(isSponsoredOrSuggestedPost(article("Bài viết bình thường")), false);
+  assert.equal(isSponsoredRedirectHref("https://www.facebook.com/photo/?fbid=1"), false);
 });
 
 test("Story pause guard recognizes Vietnamese and English playback labels", () => {

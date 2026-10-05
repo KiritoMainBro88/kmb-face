@@ -13,14 +13,16 @@
     throw new Error("FacebookAlbumCollector was not loaded.");
   }
   const Zip = globalThis.fflate;
+  const Naming = globalThis.FBISNaming;
   const DiagnosticLogger = globalThis.FBISLogger;
-  if (!Zip?.Zip || !Zip?.ZipPassThrough || !Zip?.strToU8) {
+  if (!Zip?.Zip || !Zip?.ZipPassThrough || !Zip?.strToU8 || !Naming?.parseFilenameTemplate) {
     throw new Error("fflate was not loaded.");
   }
 
   const DEFAULT_SETTINGS = Object.freeze({
     fbis_include_post_info: true,
-    fbis_default_download_mode: "zip"
+    fbis_default_download_mode: "zip",
+    fbis_filename_template: Naming.DEFAULT_FILENAME_TEMPLATE
   });
   const contentSettings = { ...DEFAULT_SETTINGS };
   const quickActionViews = new Set();
@@ -216,7 +218,8 @@
     return {
       fbis_include_post_info: value.fbis_include_post_info !== false,
       fbis_default_download_mode:
-        value.fbis_default_download_mode === "manager" ? "manager" : "zip"
+        value.fbis_default_download_mode === "manager" ? "manager" : "zip",
+      fbis_filename_template: Naming.normalizeFilenameTemplate(value.fbis_filename_template)
     };
   }
 
@@ -240,6 +243,11 @@
       contentSettings.fbis_default_download_mode =
         changes.fbis_default_download_mode.newValue === "manager" ? "manager" : "zip";
       refreshQuickActionLabels();
+    }
+    if (changes.fbis_filename_template) {
+      contentSettings.fbis_filename_template = Naming.normalizeFilenameTemplate(
+        changes.fbis_filename_template.newValue
+      );
     }
   }
 
@@ -451,11 +459,11 @@
       } else if (mode === "video") {
         if (media.videos.length === 0) throw new Error("Không tìm thấy URL Video HD.");
         ui.label.textContent = "Đang gửi Video HD sang Chrome...";
-        await downloadVideosDirect(media.videos, metadata.postId);
+        await downloadVideosDirect(media.videos, metadata);
         successText = media.videos.length === 1 ? "Đã bắt đầu tải Video HD" : `Đã gửi ${media.videos.length} video`;
       } else if (mode === "manager") {
         ui.label.textContent = `Đang gửi ${totalMedia} link sang IDM / FDM...`;
-        await downloadThroughManager(media, metadata.postId);
+        await downloadThroughManager(media, metadata);
         successText = `Đã gửi ${totalMedia} link`;
       } else if (mode === "copy") {
         await copyHdLinks(media);
@@ -487,12 +495,16 @@
     }
   }
 
-  async function downloadThroughManager(media, albumId) {
+  async function downloadThroughManager(media, metadata = {}) {
+    const context = typeof metadata === "string" ? { postId: metadata } : metadata;
+    const postId = context.postId || "unknown";
     const results = [];
     if (media.images.length > 0) {
       const response = await chrome.runtime.sendMessage({
         type: "FBIS_DOWNLOAD_IMAGES",
-        albumId: albumId || "unknown",
+        albumId: postId,
+        postId,
+        author: context.author || "Facebook",
         images: media.images.map(({ url }) => ({ url }))
       });
       if (!response?.ok && !response?.started) {
@@ -501,15 +513,17 @@
       results.push(response);
     }
     if (media.videos.length > 0) {
-      results.push(await downloadVideosDirect(media.videos, albumId));
+      results.push(await downloadVideosDirect(media.videos, context));
     }
     return results;
   }
 
-  async function downloadVideosDirect(videos, postId) {
+  async function downloadVideosDirect(videos, metadata = {}) {
+    const context = typeof metadata === "string" ? { postId: metadata } : metadata;
     const response = await chrome.runtime.sendMessage({
       type: "FBIS_DOWNLOAD_VIDEOS",
-      postId: postId || "unknown",
+      postId: context.postId || "unknown",
+      author: context.author || "Facebook",
       videos: videos.map(({ url, filename }) => ({ url, filename }))
     });
     if (!response?.ok && !response?.started) {
@@ -1052,7 +1066,7 @@
         const index = start + offset;
         const media = mediaItems[offset];
         const extension = getImageExtension(images[index].url, media.contentType);
-        writer.add(`${String(index + 1).padStart(3, "0")}.${extension}`, media.bytes);
+        writer.add(buildMediaFilename(metadata, index + 1, extension), media.bytes);
         media.bytes = null;
         completed += 1;
         onProgress(completed, total);
@@ -1061,12 +1075,12 @@
 
     for (let index = 0; index < videos.length; index += 1) {
       const video = videos[index];
+      const filename = buildMediaFilename(metadata, images.length + index + 1, "mp4");
       const smallVideo = await fetchSmallVideoForZip(video.url);
       if (smallVideo.tooLarge) {
-        largeVideos.push(video);
+        largeVideos.push({ ...video, filename });
       } else {
-        const suffix = videos.length > 1 ? `_${String(index + 1).padStart(2, "0")}` : "";
-        writer.add(`video${suffix}.mp4`, smallVideo.bytes);
+        writer.add(filename, smallVideo.bytes);
         smallVideo.bytes = null;
       }
       completed += 1;
@@ -1086,7 +1100,11 @@
           const source = batch[offset];
           const fetched = mediaItems[offset];
           const extension = getImageExtension(source.url, fetched.contentType);
-          const name = `${author}_${commentId}_${String(source.index || start + offset + 1).padStart(2, "0")}.${extension}`;
+          const name = buildMediaFilename(
+            { author, postId: commentId },
+            source.index || start + offset + 1,
+            extension
+          );
           writer.add(`comments_media/${name}`, fetched.bytes);
           fetched.bytes = null;
           completed += 1;
@@ -1095,7 +1113,11 @@
       }
 
       for (const video of commentVideos) {
-        const name = `${author}_${commentId}_${String(video.index || 1).padStart(2, "0")}.mp4`;
+        const name = buildMediaFilename(
+          { author, postId: commentId },
+          video.index || 1,
+          "mp4"
+        );
         const smallVideo = await fetchSmallVideoForZip(video.url);
         if (smallVideo.tooLarge) {
           largeVideos.push({ ...video, filename: `comments_media/${name}` });
@@ -1130,7 +1152,7 @@
     }
 
     if (largeVideos.length > 0) {
-      await downloadVideosDirect(largeVideos, metadata.postId);
+      await downloadVideosDirect(largeVideos, metadata);
     }
   }
 
@@ -1177,6 +1199,15 @@
       .replace(/_+/g, "_")
       .replace(/^_+|_+$/g, "")
       .slice(0, 80) || "unknown";
+  }
+
+  function buildMediaFilename(metadata, index, extension) {
+    const stem = Naming.parseFilenameTemplate(contentSettings.fbis_filename_template, {
+      author: metadata?.author || "Facebook",
+      postId: metadata?.postId || "unknown",
+      index
+    });
+    return `${stem}.${extension}`;
   }
 
   async function fetchMediaBatchFromBackground(urls) {

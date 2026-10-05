@@ -1,7 +1,7 @@
 "use strict";
 
 if (typeof importScripts === "function") {
-  importScripts("logger.js");
+  importScripts("logger.js", "naming.js");
 }
 
 const DiagnosticLogger = globalThis.FBISLogger || {
@@ -11,12 +11,115 @@ const DiagnosticLogger = globalThis.FBISLogger || {
   receive() {},
   warn() {}
 };
+const Naming = globalThis.FBISNaming ||
+  (typeof require === "function" ? require("./naming.js") : null);
 
 const MAX_DOWNLOADS_PER_BATCH = 500;
 const MAX_MEDIA_FETCH_BATCH = 5;
 const MAX_VIDEO_ZIP_BYTES = 15 * 1024 * 1024;
 const MAX_URL_LENGTH = 8192;
 const ALLOWED_MEDIA_HOSTS = ["fbcdn.net", "facebook.com", "fbsbx.com"];
+const UPDATE_ALARM_NAME = "fbis_check_update";
+const UPDATE_INTERVAL_MINUTES = 12 * 60;
+const UPDATE_API_URL = "https://api.github.com/repos/KiritoMainBro88/kmb-face/releases/latest";
+
+function parseSemver(value) {
+  const match = String(value || "").trim().match(
+    /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/
+  );
+  if (!match) return null;
+  return {
+    core: [Number(match[1]), Number(match[2]), Number(match[3])],
+    prerelease: match[4] ? match[4].split(".") : []
+  };
+}
+
+function semverCompare(left, right) {
+  const a = parseSemver(left);
+  const b = parseSemver(right);
+  if (!a || !b) throw new TypeError("Phiên bản semantic không hợp lệ.");
+
+  for (let index = 0; index < 3; index += 1) {
+    if (a.core[index] !== b.core[index]) return a.core[index] > b.core[index] ? 1 : -1;
+  }
+  if (a.prerelease.length === 0 && b.prerelease.length === 0) return 0;
+  if (a.prerelease.length === 0) return 1;
+  if (b.prerelease.length === 0) return -1;
+
+  const length = Math.max(a.prerelease.length, b.prerelease.length);
+  for (let index = 0; index < length; index += 1) {
+    const aPart = a.prerelease[index];
+    const bPart = b.prerelease[index];
+    if (aPart === undefined) return -1;
+    if (bPart === undefined) return 1;
+    if (aPart === bPart) continue;
+    const aNumeric = /^\d+$/.test(aPart);
+    const bNumeric = /^\d+$/.test(bPart);
+    if (aNumeric && bNumeric) return Number(aPart) > Number(bPart) ? 1 : -1;
+    if (aNumeric !== bNumeric) return aNumeric ? -1 : 1;
+    return aPart > bPart ? 1 : -1;
+  }
+  return 0;
+}
+
+async function checkForUpdate() {
+  const response = await fetch(UPDATE_API_URL, {
+    headers: { Accept: "application/vnd.github.v3+json" },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`GitHub Releases HTTP ${response.status}.`);
+
+  const release = await response.json();
+  const latestVersion = String(release?.tag_name || "").trim();
+  const releaseUrl = String(release?.html_url || "").trim();
+  if (!latestVersion || !releaseUrl) throw new Error("GitHub Release thiếu tag_name hoặc html_url.");
+
+  const currentVersion = chrome.runtime.getManifest().version;
+  const hasUpdate = semverCompare(latestVersion, currentVersion) > 0;
+  await chrome.storage.local.set({ hasUpdate, latestVersion, releaseUrl });
+  await chrome.action.setBadgeText({ text: hasUpdate ? "NEW" : "" });
+  if (hasUpdate) {
+    await chrome.action.setBadgeBackgroundColor({ color: "#E41E3F" });
+  }
+  return { hasUpdate, latestVersion, releaseUrl };
+}
+
+async function ensureUpdateAlarm() {
+  if (!chrome.alarms?.get || !chrome.alarms?.create) return;
+  const existing = await chrome.alarms.get(UPDATE_ALARM_NAME);
+  if (existing?.periodInMinutes === UPDATE_INTERVAL_MINUTES) return;
+  await chrome.alarms.create(UPDATE_ALARM_NAME, { periodInMinutes: UPDATE_INTERVAL_MINUTES });
+}
+
+function runUpdateCheck() {
+  return checkForUpdate().catch((error) => {
+    DiagnosticLogger.warn(
+      "background",
+      `UPDATE_CHECK_FAILED ${error instanceof Error ? error.message : "unknown"}`
+    );
+    return null;
+  });
+}
+
+if (typeof importScripts === "function") {
+  void ensureUpdateAlarm().catch((error) => {
+    DiagnosticLogger.warn(
+      "background",
+      `UPDATE_ALARM_FAILED ${error instanceof Error ? error.message : "unknown"}`
+    );
+  });
+  chrome.runtime.onInstalled?.addListener(() => {
+    void ensureUpdateAlarm();
+    void runUpdateCheck();
+  });
+  chrome.runtime.onStartup?.addListener(() => {
+    void ensureUpdateAlarm();
+    void runUpdateCheck();
+  });
+  chrome.alarms?.onAlarm?.addListener((alarm) => {
+    if (alarm?.name === UPDATE_ALARM_NAME) void runUpdateCheck();
+  });
+}
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id || !isFacebookPage(tab.url)) {
@@ -173,14 +276,19 @@ async function downloadVideos(message, sender) {
   }
 
   const postId = sanitizeFilePart(message.postId || "unknown", 80);
+  const author = message.author || "Facebook";
+  const filenameTemplate = await getFilenameTemplate();
   const validated = message.videos.map((video, index) => validateVideo(video, index));
   let started = 0;
   const failures = [];
 
   for (let index = 0; index < validated.length; index += 1) {
     const video = validated[index];
-    const suffix = validated.length > 1 ? `_${String(index + 1).padStart(2, "0")}` : "";
-    const filename = `FB_${postId}_video${suffix}.mp4`;
+    const filename = video.filename || `${Naming.parseFilenameTemplate(filenameTemplate, {
+      author,
+      postId,
+      index: index + 1
+    })}.mp4`;
     try {
       await chrome.downloads.download({
         url: video.url,
@@ -322,13 +430,20 @@ async function downloadBatch(message, sender) {
   }
 
   const validated = message.images.map((image, index) => validateImage(image, index));
-  const folder = buildDownloadFolder(message.albumId);
+  const postId = message.postId || message.albumId || "unknown";
+  const folder = buildDownloadFolder(postId);
+  const filenameTemplate = await getFilenameTemplate();
   let started = 0;
   const failures = [];
 
   for (let index = 0; index < validated.length; index += 1) {
     const image = validated[index];
-    const filename = `${folder}/${String(index + 1).padStart(3, "0")}.${image.extension}`;
+    const stem = Naming.parseFilenameTemplate(filenameTemplate, {
+      author: message.author || "Facebook",
+      postId,
+      index: index + 1
+    });
+    const filename = `${folder}/${stem}.${image.extension}`;
 
     try {
       await chrome.downloads.download({
@@ -413,7 +528,35 @@ function validateVideo(video, index) {
     throw new Error(`Nguồn của video #${index + 1} không được phép.`);
   }
 
-  return { url: parsed.href, extension: "mp4" };
+  return {
+    url: parsed.href,
+    extension: "mp4",
+    filename: sanitizeRelativeMediaFilename(video.filename, "mp4")
+  };
+}
+
+function sanitizeRelativeMediaFilename(value, extension) {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const segments = value
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter((segment) => segment && segment !== "." && segment !== "..")
+    .map((segment) => Naming.sanitizeFilenamePart(segment, "media", 100));
+  if (segments.length === 0) return "";
+  const suffix = `.${extension}`;
+  const last = segments[segments.length - 1];
+  if (!last.toLowerCase().endsWith(suffix)) segments[segments.length - 1] = `${last}${suffix}`;
+  return segments.join("/");
+}
+
+async function getFilenameTemplate() {
+  const fallback = Naming.DEFAULT_FILENAME_TEMPLATE;
+  try {
+    const stored = await chrome.storage.local.get({ fbis_filename_template: fallback });
+    return Naming.normalizeFilenameTemplate(stored.fbis_filename_template);
+  } catch {
+    return fallback;
+  }
 }
 
 function isHostOrSubdomain(hostname, allowedHost) {
@@ -494,10 +637,13 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     buildDownloadFolder,
     arrayBufferToBase64,
+    checkForUpdate,
     getTrustedImageExtension,
     isFacebookPage,
     isHostOrSubdomain,
+    parseSemver,
     sanitizeFilePart,
+    semverCompare,
     validateImage,
     validateVideo
   };
