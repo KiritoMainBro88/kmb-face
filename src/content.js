@@ -14,15 +14,18 @@
   }
   const Zip = globalThis.fflate;
   const Naming = globalThis.FBISNaming;
+  const I18n = globalThis.FBISI18n;
   const DiagnosticLogger = globalThis.FBISLogger;
-  if (!Zip?.Zip || !Zip?.ZipPassThrough || !Zip?.strToU8 || !Naming?.parseFilenameTemplate) {
-    throw new Error("fflate was not loaded.");
+  if (!Zip?.Zip || !Zip?.ZipPassThrough || !Zip?.strToU8 || !Naming?.parseFilenameTemplate || !I18n?.t) {
+    throw new Error("Required extension modules were not loaded.");
   }
+  const t = (key, params) => I18n.t(key, params);
 
   const DEFAULT_SETTINGS = Object.freeze({
     fbis_include_post_info: true,
     fbis_default_download_mode: "zip",
-    fbis_filename_template: Naming.DEFAULT_FILENAME_TEMPLATE
+    fbis_filename_template: Naming.DEFAULT_FILENAME_TEMPLATE,
+    fbis_language: I18n.DEFAULT_LANGUAGE
   });
   const contentSettings = { ...DEFAULT_SETTINGS };
   const quickActionViews = new Set();
@@ -102,31 +105,31 @@
         <div class="brand-mark" aria-hidden="true">↓</div>
         <div class="heading-wrap">
           <h1>Facebook Image Saver</h1>
-          <p>Tải trọn bộ ảnh trong một bài viết</p>
+          <p data-i18n="panel_subtitle"></p>
         </div>
-        <button class="icon-button" data-action="close" type="button" aria-label="Đóng bảng tải ảnh">×</button>
+        <button class="icon-button" data-action="close" type="button" data-i18n-aria="close_panel" aria-label="Close image downloader">×</button>
       </header>
 
       <div class="body">
         <section class="intro">
           <div class="step-number">1</div>
           <div>
-            <strong>Chọn bài viết</strong>
-            <p class="muted">Có thể chọn bài trên feed hoặc dùng bài/modal đang mở.</p>
+            <strong data-i18n="choose_post"></strong>
+            <p class="muted" data-i18n="choose_post_hint"></p>
           </div>
         </section>
 
         <div class="selection-card is-empty" data-slot="selection-card">
           <div class="selection-icon" aria-hidden="true">▧</div>
           <div class="selection-copy">
-            <strong data-slot="selection-title">Chưa chọn bài viết</strong>
-            <span data-slot="selection-meta">Mở bài có nhiều ảnh rồi chọn bên dưới.</span>
+            <strong data-slot="selection-title" data-i18n="no_post_selected"></strong>
+            <span data-slot="selection-meta" data-i18n="no_post_selected_hint"></span>
           </div>
         </div>
 
         <div class="button-row selection-actions">
-          <button class="button secondary" data-action="pick" type="button">Chọn bài trên trang</button>
-          <button class="button ghost is-hidden" data-action="use-open" type="button">Dùng bài đang mở</button>
+          <button class="button secondary" data-action="pick" type="button" data-i18n="choose_post_on_page"></button>
+          <button class="button ghost is-hidden" data-action="use-open" type="button" data-i18n="use_open_post"></button>
         </div>
 
         <section class="scan-actions is-hidden" data-slot="scan-actions">
@@ -134,49 +137,47 @@
           <div class="intro compact">
             <div class="step-number">2</div>
             <div>
-              <strong>Quét và tải ảnh</strong>
-              <p class="muted">Facebook sẽ tự chuyển lần lượt qua carousel.</p>
+              <strong data-i18n="scan_and_download"></strong>
+              <p class="muted" data-i18n="scan_hint"></p>
             </div>
           </div>
           <div class="button-row">
-            <button class="button primary" data-action="scan-all" type="button">Tải tất cả</button>
-            <button class="button secondary" data-action="scan-choose" type="button">Chọn ảnh</button>
+            <button class="button primary" data-action="scan-all" type="button" data-i18n="download_all"></button>
+            <button class="button secondary" data-action="scan-choose" type="button" data-i18n="choose_photos"></button>
           </div>
         </section>
 
         <section class="progress-card is-hidden" data-slot="progress-card" aria-live="polite">
           <div class="progress-heading">
-            <strong data-slot="progress-title">Đang quét ảnh…</strong>
+            <strong data-slot="progress-title" data-i18n="scanning_photos"></strong>
             <span data-slot="progress-count">0</span>
           </div>
           <div class="progress-track"><div class="progress-fill" data-slot="progress-fill"></div></div>
-          <p class="status-text" data-slot="status-text">Giữ tab này mở trong lúc quét.</p>
-          <button class="text-button" data-action="cancel" type="button">Dừng quét</button>
+          <p class="status-text" data-slot="status-text" data-i18n="keep_tab_open"></p>
+          <button class="text-button" data-action="cancel" type="button" data-i18n="stop_scan"></button>
         </section>
 
         <section class="results is-hidden" data-slot="results">
           <div class="divider"></div>
           <div class="results-heading">
             <div>
-              <strong>Ảnh đã tìm thấy</strong>
-              <p class="muted" data-slot="selected-count">Đã chọn 0 ảnh</p>
+              <strong data-i18n="found_photos"></strong>
+              <p class="muted" data-slot="selected-count"></p>
             </div>
             <div class="mini-actions">
-              <button class="text-button" data-action="select-all" type="button">Tất cả</button>
-              <button class="text-button" data-action="select-none" type="button">Bỏ chọn</button>
+              <button class="text-button" data-action="select-all" type="button" data-i18n="select_all"></button>
+              <button class="text-button" data-action="select-none" type="button" data-i18n="select_none"></button>
             </div>
           </div>
           <div class="gallery" data-slot="gallery"></div>
-          <button class="button primary full-width" data-action="download-selected" type="button">Tải ảnh đã chọn</button>
+          <button class="button primary full-width" data-action="download-selected" type="button" data-i18n="download_selected"></button>
         </section>
 
-        <p class="privacy-note">Ảnh chỉ được xử lý trong trình duyệt của bạn.</p>
+        <p class="privacy-note" data-i18n="privacy_note"></p>
       </div>
     </aside>
 
-    <button class="picker-toast is-hidden" data-slot="picker-toast" type="button" data-action="cancel-pick">
-      Nhấp vào bài viết cần tải ảnh · <strong>Hủy</strong>
-    </button>
+    <button class="picker-toast is-hidden" data-slot="picker-toast" type="button" data-action="cancel-pick" data-i18n="picker_prompt"></button>
   `;
 
   const elements = {
@@ -197,6 +198,7 @@
     gallery: shadow.querySelector('[data-slot="gallery"]'),
     downloadSelectedButton: shadow.querySelector('[data-action="download-selected"]')
   };
+  refreshLocalizedUi();
 
   shadow.addEventListener("click", handlePanelClick);
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -219,7 +221,8 @@
       fbis_include_post_info: value.fbis_include_post_info !== false,
       fbis_default_download_mode:
         value.fbis_default_download_mode === "manager" ? "manager" : "zip",
-      fbis_filename_template: Naming.normalizeFilenameTemplate(value.fbis_filename_template)
+      fbis_filename_template: Naming.normalizeFilenameTemplate(value.fbis_filename_template),
+      fbis_language: I18n.normalizeLanguagePreference(value.fbis_language)
     };
   }
 
@@ -228,9 +231,12 @@
     try {
       const stored = await chrome.storage.local.get(DEFAULT_SETTINGS);
       Object.assign(contentSettings, normalizeContentSettings(stored));
+      I18n.setPreference(contentSettings.fbis_language);
     } catch {
       Object.assign(contentSettings, DEFAULT_SETTINGS);
+      I18n.setPreference(DEFAULT_SETTINGS.fbis_language);
     }
+    refreshLocalizedUi();
     chrome.storage?.onChanged?.addListener(handleContentSettingsChanged);
   }
 
@@ -249,6 +255,27 @@
         changes.fbis_filename_template.newValue
       );
     }
+    if (changes.fbis_language) {
+      contentSettings.fbis_language = I18n.normalizeLanguagePreference(changes.fbis_language.newValue);
+      I18n.setPreference(contentSettings.fbis_language);
+      refreshLocalizedUi();
+    }
+  }
+
+  function refreshLocalizedUi() {
+    for (const node of shadow.querySelectorAll("[data-i18n]")) {
+      node.textContent = t(node.dataset.i18n);
+    }
+    for (const node of shadow.querySelectorAll("[data-i18n-aria]")) {
+      node.setAttribute("aria-label", t(node.dataset.i18nAria));
+    }
+    if (elements.useOpenButton?.dataset.context === "viewer") {
+      elements.useOpenButton.textContent = t("use_open_album");
+    } else if (elements.useOpenButton) {
+      elements.useOpenButton.textContent = t("use_open_post");
+    }
+    if (state.images.length > 0) updateSelectedCount();
+    refreshQuickActionLabels();
   }
 
   function getDefaultQuickActionMode(pureVideo) {
@@ -256,13 +283,15 @@
   }
 
   function getQuickActionLabel({ pureVideo, estimatedImages, estimatedVideos }) {
-    if (pureVideo) return "⚡ Tải Video HD (MP4)";
+    if (pureVideo) return t("quick_download_video");
     if (contentSettings.fbis_default_download_mode === "manager") {
       const total = estimatedImages + estimatedVideos;
-      return `⚡ IDM Direct ${total} media`;
+      return t("quick_download_manager", { count: total });
     }
-    if (estimatedVideos > 0) return `⚡ Tải ${estimatedImages} ảnh + ${estimatedVideos} Video`;
-    return `⚡ Tải nhanh ${estimatedImages} ảnh (ZIP)`;
+    if (estimatedVideos > 0) {
+      return t("quick_download_mixed", { photos: estimatedImages, videos: estimatedVideos });
+    }
+    return t("quick_download_zip", { count: estimatedImages });
   }
 
   function refreshQuickActionLabels() {
@@ -272,6 +301,16 @@
         continue;
       }
       view.label.textContent = getQuickActionLabel(view);
+      view.moreButton?.setAttribute("aria-label", t("download_mode"));
+      if (view.optionButtons) {
+        const labels = {
+          zip: t("download_zip"),
+          manager: t("direct_idm_fdm"),
+          copy: t("copy_hd_links"),
+          comments: t("harvest_comments")
+        };
+        for (const option of view.optionButtons) option.textContent = labels[option.dataset.mode];
+      }
     }
   }
 
@@ -367,16 +406,16 @@
     const moreButton = document.createElement("button");
     moreButton.className = "more";
     moreButton.type = "button";
-    moreButton.setAttribute("aria-label", "Chọn chế độ tải");
+    moreButton.setAttribute("aria-label", t("download_mode"));
     moreButton.textContent = "▾";
     const menu = document.createElement("div");
     menu.className = "menu";
     menu.hidden = true;
     const menuOptions = [
-      ["zip", "Tải ZIP"],
-      ["manager", "Tải qua IDM / FDM"],
-      ["copy", "Copy link HD"],
-      ["comments", "💬 Quét Media Bình luận (ZIP)"]
+      ["zip", t("download_zip")],
+      ["manager", t("direct_idm_fdm")],
+      ["copy", t("copy_hd_links")],
+      ["comments", t("harvest_comments")]
     ];
     const optionButtons = menuOptions.map(([mode, text]) => {
       const option = document.createElement("button");
@@ -391,6 +430,8 @@
     wrap.append(button, moreButton, menu, toast);
     root.append(style, wrap);
     mediaContainer.appendChild(host);
+    quickView.moreButton = moreButton;
+    quickView.optionButtons = optionButtons;
     quickActionViews.add(quickView);
 
     moreButton.addEventListener("click", (event) => {
@@ -450,32 +491,34 @@
       if (mode === "comments") {
         const comments = Collector.collectCommentMedia(post);
         const commentCount = comments.reduce((sum, comment) => sum + comment.media.length, 0);
-        if (commentCount === 0) throw new Error("Không tìm thấy media trong bình luận đã tải trên trang.");
-        ui.label.textContent = `Đang gom ${commentCount} media bình luận...`;
+        if (commentCount === 0) throw new Error(t("no_comment_media"));
+        ui.label.textContent = t("harvesting_comments", { count: commentCount });
         await createAndDownloadZip({ ...media, comments }, metadata, (done, total) => {
-          ui.label.textContent = `Đang nén ZIP (${done}/${total})...`;
+          ui.label.textContent = t("zipping_progress", { done, total });
         });
-        successText = `Đã gom ${commentCount} media bình luận`;
+        successText = t("harvested_comments", { count: commentCount });
       } else if (mode === "video") {
-        if (media.videos.length === 0) throw new Error("Không tìm thấy URL Video HD.");
-        ui.label.textContent = "Đang gửi Video HD sang Chrome...";
+        if (media.videos.length === 0) throw new Error(t("no_hd_video"));
+        ui.label.textContent = t("sending_hd_video");
         await downloadVideosDirect(media.videos, metadata);
-        successText = media.videos.length === 1 ? "Đã bắt đầu tải Video HD" : `Đã gửi ${media.videos.length} video`;
+        successText = media.videos.length === 1
+          ? t("started_hd_video")
+          : t("sent_videos", { count: media.videos.length });
       } else if (mode === "manager") {
-        ui.label.textContent = `Đang gửi ${totalMedia} link sang IDM / FDM...`;
+        ui.label.textContent = t("sending_manager", { count: totalMedia });
         await downloadThroughManager(media, metadata);
-        successText = `Đã gửi ${totalMedia} link`;
+        successText = t("sent_links", { count: totalMedia });
       } else if (mode === "copy") {
         await copyHdLinks(media);
-        successText = `Đã copy ${totalMedia} link HD`;
-        showQuickToast(ui.toast, successText);
+        successText = t("copied_links", { count: totalMedia });
+        showQuickToast(ui.toast, t("toast_copied"));
       } else {
         await createAndDownloadZip(media, metadata, (done, total) => {
-          ui.label.textContent = `Đang nén ZIP (${done}/${total})...`;
+          ui.label.textContent = t("zipping_progress", { done, total });
         });
         successText = media.videos.length > 0
-          ? `Đã xử lý ${media.images.length} ảnh + ${media.videos.length} video`
-          : `Đã tải ZIP ${media.images.length} ảnh`;
+          ? t("processed_mixed", { photos: media.images.length, videos: media.videos.length })
+          : t("downloaded_zip", { count: media.images.length });
       }
 
       ui.icon.classList.remove("spin");
@@ -486,7 +529,7 @@
       DiagnosticLogger?.error("content", `QUICK_ACTION_FAILED ${error instanceof Error ? error.message : "unknown"}`);
       ui.icon.classList.remove("spin");
       ui.icon.textContent = "!";
-      ui.label.textContent = error instanceof Error ? error.message : "Tải nhanh thất bại";
+      ui.label.textContent = error instanceof Error ? error.message : t("quick_download_failed");
     } finally {
       state.quickActionBusy.delete(post);
       ui.button.disabled = false;
@@ -508,7 +551,7 @@
         images: media.images.map(({ url }) => ({ url }))
       });
       if (!response?.ok && !response?.started) {
-        throw new Error(response?.error || "Chrome không gửi được link ảnh sang trình quản lý tải.");
+        throw new Error(response?.error || t("manager_image_failed"));
       }
       results.push(response);
     }
@@ -527,7 +570,7 @@
       videos: videos.map(({ url, filename }) => ({ url, filename }))
     });
     if (!response?.ok && !response?.started) {
-      throw new Error(response?.error || "Chrome không bắt đầu được video download.");
+      throw new Error(response?.error || t("video_download_failed"));
     }
     return response;
   }
@@ -537,7 +580,7 @@
       .map((item) => item.url)
       .filter(Boolean)
       .join("\r\n");
-    if (!text) throw new Error("Không có link HD để copy.");
+    if (!text) throw new Error(t("no_links_to_copy"));
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
       return;
@@ -550,7 +593,7 @@
     textarea.select();
     const copied = document.execCommand("copy");
     textarea.remove();
-    if (!copied) throw new Error("Trình duyệt từ chối copy link.");
+    if (!copied) throw new Error(t("clipboard_rejected"));
   }
 
   function showQuickToast(toast, message) {
@@ -575,7 +618,7 @@
     );
 
     const metadata = Collector.extractPostMetadata(post, location.href);
-    onStatus("Đang kéo link...");
+    onStatus(t("resolving_links"));
     let relayImages = [];
     let relayVideos = [];
     try {
@@ -591,7 +634,7 @@
     const imagesComplete = photoLinks.length === 0 || (expected ? mergedImages.length >= expected : mergedImages.length > 0);
     if (imagesComplete) {
       if (videoRefs.length > 0 && videos.length === 0) {
-        throw new Error("Không tìm thấy URL Video HD trực tiếp.");
+        throw new Error(t("no_direct_hd_video"));
       }
       return {
         images: photoLinks.length === 0
@@ -603,16 +646,19 @@
       };
     }
 
-    onStatus("Đang quét nhanh carousel...");
+    onStatus(t("quick_scanning_carousel"));
     const returnUrl = location.href;
     document.documentElement.classList.add("fbis-silent-scan");
     try {
       const result = await fastCollector.collectFromPost(post, {
         expectedCount: expected,
         albumId: metadata.postId,
-        onProgress: ({ found, expected: total }) => onStatus(`Đang quét nhanh ${found}${total ? `/${total}` : ""} ảnh...`)
+        onProgress: ({ found, expected: total }) => onStatus(t("quick_scanning_photos", {
+          found,
+          total: total ? `/${total}` : ""
+        }))
       });
-      if (result.images.length === 0 && videos.length === 0) throw new Error("Không tìm thấy media để tải.");
+      if (result.images.length === 0 && videos.length === 0) throw new Error(t("no_media_to_download"));
       return { images: result.images, videos };
     } finally {
       closePhotoViewer(returnUrl);
@@ -707,12 +753,12 @@
     if (openPost) {
       setSelectedPost(openPost);
       elements.useOpenButton.classList.remove("is-hidden");
-      elements.useOpenButton.textContent = "Dùng bài đang mở";
+      elements.useOpenButton.textContent = t("use_open_post");
       elements.useOpenButton.dataset.context = "post";
     } else if (openViewer) {
       setOpenViewerSelection();
       elements.useOpenButton.classList.remove("is-hidden");
-      elements.useOpenButton.textContent = "Dùng album đang mở";
+      elements.useOpenButton.textContent = t("use_open_album");
       elements.useOpenButton.dataset.context = "viewer";
     } else {
       elements.useOpenButton.classList.add("is-hidden");
@@ -741,7 +787,7 @@
       scanImages(false);
     } else if (action === "cancel") {
       state.cancelRequested = true;
-      setStatus("Đang dừng sau ảnh hiện tại…", "Đã yêu cầu dừng");
+      setStatus(t("stopping_after_current"), t("stop_requested"));
     } else if (action === "select-all") {
       state.selectedIndexes = new Set(state.images.map((_, index) => index));
       syncGallerySelection();
@@ -831,21 +877,21 @@
     elements.selectionCard.classList.remove("is-empty");
     elements.selectionTitle.textContent = state.selectedSummary;
     elements.selectionMeta.textContent = countInfo.expected
-      ? `Facebook hiển thị khoảng ${countInfo.expected} ảnh trong bài.`
-      : "Đã phát hiện bài viết có ảnh.";
+      ? t("approximate_photos", { count: countInfo.expected })
+      : t("detected_photo_post");
     elements.scanActions.classList.remove("is-hidden");
   }
 
   function setOpenViewerSelection() {
     state.selectedPost = null;
-    state.selectedSummary = "Album ảnh đang mở";
+    state.selectedSummary = t("open_photo_album");
     state.expectedCount = null;
     state.albumId = Collector.extractAlbumId(location.href) || "unknown";
     resetResults();
 
     elements.selectionCard.classList.remove("is-empty");
     elements.selectionTitle.textContent = state.selectedSummary;
-    elements.selectionMeta.textContent = "Bắt đầu từ ảnh hiện tại và quét đến khi carousel lặp lại.";
+    elements.selectionMeta.textContent = t("open_album_hint");
     elements.scanActions.classList.remove("is-hidden");
   }
 
@@ -862,13 +908,13 @@
     }
 
     if (state.selectedPost && !state.selectedPost.isConnected) {
-      showInlineError("Bài viết đã thay đổi trên trang. Hãy chọn lại bài viết.");
+      showInlineError(t("post_changed"));
       return;
     }
 
     const scanningOpenViewer = !state.selectedPost && Collector.isPhotoViewerLocation(location.href);
     if (!state.selectedPost && !scanningOpenViewer) {
-      showInlineError("Hãy chọn một bài viết hoặc mở trình xem ảnh trước.");
+      showInlineError(t("choose_post_or_viewer"));
       return;
     }
 
@@ -877,9 +923,9 @@
     resetResults();
     setControlsDisabled(true);
     elements.progressCard.classList.remove("is-hidden");
-    elements.progressTitle.textContent = "Đang quét ảnh…";
+    elements.progressTitle.textContent = t("scanning_photos");
     elements.progressFill.style.width = "4%";
-    setStatus("Facebook sẽ tự chuyển qua từng ảnh. Đừng đóng tab.", formatProgress(0));
+    setStatus(t("scanning_instruction"), formatProgress(0));
 
     try {
       const options = {
@@ -889,7 +935,7 @@
         onProgress: ({ found, expected }) => {
           const percent = expected ? Math.min(96, Math.max(4, (found / expected) * 100)) : Math.min(92, 8 + found * 2);
           elements.progressFill.style.width = `${percent}%`;
-          setStatus("Đang lấy ảnh chất lượng lớn từ trình xem Facebook…", formatProgress(found, expected));
+          setStatus(t("fetching_large_photos"), formatProgress(found, expected));
         }
       };
 
@@ -903,26 +949,35 @@
       elements.progressFill.style.width = result.complete ? "100%" : "96%";
 
       if (result.reason === "cancelled") {
-        elements.progressTitle.textContent = "Đã dừng quét";
-        setStatus(`Đã dừng. Giữ lại ${result.images.length} ảnh đã tìm thấy.`, `${result.images.length} ảnh`);
+        elements.progressTitle.textContent = t("scan_stopped");
+        setStatus(
+          t("scan_stopped_detail", { count: result.images.length }),
+          t("image_count", { count: result.images.length })
+        );
         showResults();
       } else if (!result.complete) {
-        elements.progressTitle.textContent = "Quét chưa hoàn tất";
+        elements.progressTitle.textContent = t("scan_incomplete");
         setStatus(
-          `Quét chưa chắc đã đủ. Đã tìm thấy ${result.images.length}${result.expectedCount ? `/${result.expectedCount}` : ""} ảnh; bạn có thể tải phần này hoặc quét lại.`,
-          "Chưa hoàn tất"
+          t("scan_incomplete_detail", {
+            found: result.images.length,
+            expected: result.expectedCount ? `/${result.expectedCount}` : ""
+          }),
+          t("incomplete")
         );
         showResults();
       } else {
-        elements.progressTitle.textContent = "Quét hoàn tất";
-        setStatus(`Đã tìm thấy ${result.images.length} ảnh không trùng.`, `${result.images.length} ảnh`);
+        elements.progressTitle.textContent = t("scan_complete");
+        setStatus(
+          t("scan_complete_detail", { count: result.images.length }),
+          t("image_count", { count: result.images.length })
+        );
         showResults();
         if (downloadAllAfterScan && result.images.length > 0) {
           await startDownload(result.images);
         }
       }
     } catch (error) {
-      showInlineError(error instanceof Error ? error.message : "Không thể quét ảnh trong bài viết.");
+      showInlineError(error instanceof Error ? error.message : t("scan_failed"));
     } finally {
       state.scanning = false;
       setControlsDisabled(false);
@@ -942,7 +997,7 @@
       checkbox.type = "checkbox";
       checkbox.checked = true;
       checkbox.dataset.index = String(index);
-      checkbox.setAttribute("aria-label", `Chọn ảnh ${index + 1}`);
+      checkbox.setAttribute("aria-label", t("select_photo", { index: index + 1 }));
       checkbox.addEventListener("change", () => {
         if (checkbox.checked) {
           state.selectedIndexes.add(index);
@@ -955,7 +1010,7 @@
 
       const preview = document.createElement("img");
       preview.src = image.url;
-      preview.alt = `Ảnh ${index + 1}`;
+      preview.alt = t("photo_alt", { index: index + 1 });
       preview.loading = "lazy";
       preview.referrerPolicy = "no-referrer";
 
@@ -965,7 +1020,7 @@
 
       const dimensions = document.createElement("span");
       dimensions.className = "image-dimensions";
-      dimensions.textContent = image.width && image.height ? `${image.width}×${image.height}` : "Ảnh Facebook";
+      dimensions.textContent = image.width && image.height ? `${image.width}×${image.height}` : t("facebook_photo");
 
       label.append(checkbox, preview, badge, dimensions);
       fragment.appendChild(label);
@@ -986,8 +1041,10 @@
 
   function updateSelectedCount() {
     const count = state.selectedIndexes.size;
-    elements.selectedCount.textContent = `Đã chọn ${count}/${state.images.length} ảnh`;
-    elements.downloadSelectedButton.textContent = count ? `Tải ${count} ảnh đã chọn` : "Chưa chọn ảnh";
+    elements.selectedCount.textContent = t("selected_photos", { count, total: state.images.length });
+    elements.downloadSelectedButton.textContent = count
+      ? t("download_selected_count", { count })
+      : t("no_photo_selected");
     elements.downloadSelectedButton.disabled = count === 0 || state.downloading;
   }
 
@@ -1006,9 +1063,9 @@
     state.downloading = true;
     setControlsDisabled(true);
     elements.progressCard.classList.remove("is-hidden");
-    elements.progressTitle.textContent = "Đang tạo ZIP…";
+    elements.progressTitle.textContent = t("creating_zip");
     elements.progressFill.style.width = "4%";
-    setStatus("Đang tải ảnh và đóng gói hoàn toàn trong trình duyệt.", `0/${images.length}`);
+    setStatus(t("packaging_browser"), `0/${images.length}`);
 
     try {
       const metadata = state.selectedPost?.isConnected
@@ -1023,19 +1080,19 @@
       await createAndDownloadZip(images, metadata, (processed, total) => {
         const percent = Math.max(4, Math.min(96, (processed / total) * 96));
         elements.progressFill.style.width = `${percent}%`;
-        setStatus("Đang kéo ảnh và đóng gói ZIP…", `${processed}/${total}`);
+        setStatus(t("packaging_zip"), `${processed}/${total}`);
       });
       elements.progressFill.style.width = "100%";
-      elements.progressTitle.textContent = "Đã bắt đầu tải ZIP";
+      elements.progressTitle.textContent = t("zip_started");
       setStatus(
         contentSettings.fbis_include_post_info
-          ? `Đã đóng gói ${images.length} ảnh cùng post_info.txt.`
-          : `Đã đóng gói ${images.length} ảnh.`,
-        `${images.length} ảnh`
+          ? t("packaged_with_info", { count: images.length })
+          : t("packaged_photos", { count: images.length }),
+        t("image_count", { count: images.length })
       );
     } catch (error) {
       DiagnosticLogger?.error("content", `ZIP_FLOW_FAILED ${error instanceof Error ? error.message : "unknown"}`);
-      showInlineError(error instanceof Error ? error.message : "Không thể bắt đầu tải ảnh.");
+      showInlineError(error instanceof Error ? error.message : t("zip_download_failed"));
     } finally {
       state.downloading = false;
       setControlsDisabled(false);
@@ -1146,7 +1203,7 @@
         url: blobUrl,
         filename
       });
-      if (!response?.ok) throw new Error(response?.error || "Chrome không bắt đầu được ZIP download.");
+      if (!response?.ok) throw new Error(response?.error || t("chrome_zip_failed"));
     } finally {
       URL.revokeObjectURL(blobUrl);
     }
@@ -1216,7 +1273,7 @@
       urls
     });
     if (!response?.ok || !Array.isArray(response.items) || response.items.length !== urls.length) {
-      throw new Error(response?.error || "Background không tải đủ dữ liệu ảnh.");
+      throw new Error(response?.error || t("background_media_incomplete"));
     }
     return response.items.map((item) => ({
       contentType: item.contentType || "application/octet-stream",
@@ -1230,13 +1287,13 @@
       url
     });
     if (!response?.ok) {
-      throw new Error(response?.error || "Background không kiểm tra được video.");
+      throw new Error(response?.error || t("background_video_check_failed"));
     }
     if (response.tooLarge) {
       return { tooLarge: true, size: response.size ?? null };
     }
     if (!response.base64) {
-      throw new Error("Background không trả dữ liệu video.");
+      throw new Error(t("background_video_missing_data"));
     }
     return {
       tooLarge: false,
@@ -1318,7 +1375,10 @@
     const percent = progress.total ? Math.max(4, (progress.processed / progress.total) * 100) : 4;
     elements.progressFill.style.width = `${percent}%`;
     setStatus(
-      `Đã bắt đầu ${progress.started} lượt tải${progress.failed ? `; ${progress.failed} lỗi` : ""}.`,
+      t("download_progress", {
+        started: progress.started,
+        failed: progress.failed ? t("download_failures", { count: progress.failed }) : ""
+      }),
       `${progress.processed}/${progress.total}`
     );
   }
@@ -1330,15 +1390,15 @@
 
   function showInlineError(message) {
     elements.progressCard.classList.remove("is-hidden");
-    elements.progressTitle.textContent = "Cần thử lại";
+    elements.progressTitle.textContent = t("retry_needed");
     elements.progressFill.style.width = "100%";
     elements.progressFill.classList.add("is-error");
-    setStatus(message, "Lỗi");
+    setStatus(message, t("error"));
     window.setTimeout(() => elements.progressFill.classList.remove("is-error"), 2500);
   }
 
   function formatProgress(found, expected = state.expectedCount) {
-    return expected ? `${found}/${expected}` : `${found} ảnh`;
+    return expected ? `${found}/${expected}` : t("image_count", { count: found });
   }
 
   function setControlsDisabled(disabled) {

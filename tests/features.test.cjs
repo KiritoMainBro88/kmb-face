@@ -44,7 +44,8 @@ test("feature settings normalize storage values and cosmetic badge toggle", () =
   assert.deepEqual(normalizeFeatureSettings({}), {
     fbis_enable_like_confirm: true,
     fbis_enable_cosmetic_badge: true,
-    fbis_clean_feed: true
+    fbis_clean_feed: true,
+    fbis_language: "auto"
   });
   assert.equal(isCosmeticBadgeEnabled({ fbis_enable_cosmetic_badge: false }), false);
 });

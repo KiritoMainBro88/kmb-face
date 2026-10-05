@@ -3,13 +3,16 @@
 
   const Naming = globalScope.FBISNaming ||
     (typeof require === "function" ? require("./naming.js") : null);
+  const I18n = globalScope.FBISI18n ||
+    (typeof require === "function" ? require("./i18n.js") : null);
   const DEFAULT_SETTINGS = Object.freeze({
     fbis_enable_like_confirm: true,
     fbis_enable_cosmetic_badge: true,
     fbis_include_post_info: true,
     fbis_default_download_mode: "zip",
     fbis_clean_feed: true,
-    fbis_filename_template: Naming?.DEFAULT_FILENAME_TEMPLATE || "{author}_{postId}_{index}"
+    fbis_filename_template: Naming?.DEFAULT_FILENAME_TEMPLATE || "{author}_{postId}_{index}",
+    fbis_language: I18n?.DEFAULT_LANGUAGE || "auto"
   });
   const ISSUE_NEW_URL = "https://github.com/KiritoMainBro88/kmb-face/issues/new";
 
@@ -48,7 +51,10 @@
       fbis_clean_feed: value.fbis_clean_feed !== false,
       fbis_filename_template: Naming?.normalizeFilenameTemplate
         ? Naming.normalizeFilenameTemplate(value.fbis_filename_template)
-        : String(value.fbis_filename_template || DEFAULT_SETTINGS.fbis_filename_template).trim()
+        : String(value.fbis_filename_template || DEFAULT_SETTINGS.fbis_filename_template).trim(),
+      fbis_language: I18n?.normalizeLanguagePreference
+        ? I18n.normalizeLanguagePreference(value.fbis_language)
+        : ["auto", "vi", "en"].includes(value.fbis_language) ? value.fbis_language : "auto"
     };
   }
 
@@ -69,13 +75,14 @@
       cosmeticBadge: document.getElementById("cosmetic-badge"),
       postInfo: document.getElementById("post-info"),
       cleanFeed: document.getElementById("clean-feed"),
+      language: document.getElementById("language-select"),
       filenameTemplate: document.getElementById("filename-template"),
       modes: Array.from(document.querySelectorAll('input[name="download-mode"]')),
       status: document.getElementById("status"),
       copyLogs: document.getElementById("copy-logs"),
       reportBug: document.getElementById("report-bug"),
       updateBanner: document.getElementById("update-banner"),
-      updateVersion: document.getElementById("update-version"),
+      updateCopy: document.getElementById("update-copy"),
       updateDownload: document.getElementById("update-download")
     };
 
@@ -86,14 +93,31 @@
       releaseUrl: ""
     });
     const settings = normalizeSettings(stored);
+    I18n?.setPreference?.(settings.fbis_language);
     controls.likeConfirm.checked = settings.fbis_enable_like_confirm;
     controls.cosmeticBadge.checked = settings.fbis_enable_cosmetic_badge;
     controls.postInfo.checked = settings.fbis_include_post_info;
     controls.cleanFeed.checked = settings.fbis_clean_feed;
+    controls.language.value = settings.fbis_language;
     controls.filenameTemplate.value = settings.fbis_filename_template;
     controls.modes.find((input) => input.value === settings.fbis_default_download_mode).checked = true;
+
+    const renderLocalizedText = () => {
+      if (!I18n?.t) return;
+      document.documentElement.lang = I18n.getLanguage();
+      for (const node of document.querySelectorAll("[data-i18n]")) {
+        const params = node.dataset.i18n === "popup_subtitle"
+          ? { version: chrome.runtime.getManifest().version }
+          : {};
+        node.textContent = I18n.t(node.dataset.i18n, params);
+      }
+      if (stored.hasUpdate && stored.latestVersion && isSafeReleaseUrl(stored.releaseUrl)) {
+        controls.updateCopy.textContent = I18n.t("banner_update_label", { version: stored.latestVersion });
+      }
+    };
+    renderLocalizedText();
+
     if (stored.hasUpdate && stored.latestVersion && isSafeReleaseUrl(stored.releaseUrl)) {
-      controls.updateVersion.textContent = stored.latestVersion;
       controls.updateBanner.hidden = false;
       controls.updateDownload.addEventListener("click", () => {
         void chrome.tabs.create({ url: stored.releaseUrl });
@@ -101,9 +125,9 @@
     }
 
     let statusTimer = 0;
-    const showStatus = (message = "Đã lưu", isError = false) => {
+    const showStatus = (message, isError = false) => {
       globalScope.clearTimeout(statusTimer);
-      controls.status.textContent = message;
+      controls.status.textContent = message || I18n?.t?.("saved") || "Saved";
       controls.status.classList.toggle("error", isError);
       controls.status.classList.add("show");
       statusTimer = globalScope.setTimeout(() => controls.status.classList.remove("show"), 1600);
@@ -128,6 +152,14 @@
     ]) {
       control.addEventListener("change", () => void saveBooleans());
     }
+    controls.language.addEventListener("change", async () => {
+      const language = I18n?.normalizeLanguagePreference?.(controls.language.value) || controls.language.value;
+      await chrome.storage.local.set({ fbis_language: language });
+      I18n?.setPreference?.(language);
+      renderLocalizedText();
+      globalScope.FBISLogger?.info("popup", `LANGUAGE_${String(language).toUpperCase()}`);
+      showStatus();
+    });
     controls.filenameTemplate.addEventListener("change", async () => {
       const normalized = Naming?.normalizeFilenameTemplate
         ? Naming.normalizeFilenameTemplate(controls.filenameTemplate.value)
@@ -167,10 +199,10 @@
         const markdown = await collectDiagnostics();
         await navigator.clipboard.writeText(markdown);
         globalScope.FBISLogger?.info("popup", "DIAGNOSTICS_COPIED");
-        showStatus("Đã copy log");
+        showStatus(I18n?.t?.("copied_logs") || "Logs copied");
       } catch (error) {
         globalScope.FBISLogger?.error("popup", `COPY_LOGS_FAILED ${error instanceof Error ? error.message : "unknown"}`);
-        showStatus("Không copy được log", true);
+        showStatus(I18n?.t?.("copy_logs_failed") || "Could not copy logs", true);
       }
     });
 
@@ -179,10 +211,10 @@
         const markdown = await collectDiagnostics();
         await chrome.tabs.create({ url: buildIssueUrl(markdown) });
         globalScope.FBISLogger?.info("popup", "BUG_REPORT_OPENED");
-        showStatus("Đã mở GitHub");
+        showStatus(I18n?.t?.("opened_github") || "Opened GitHub");
       } catch (error) {
         globalScope.FBISLogger?.error("popup", `BUG_REPORT_FAILED ${error instanceof Error ? error.message : "unknown"}`);
-        showStatus("Không mở được GitHub", true);
+        showStatus(I18n?.t?.("open_github_failed") || "Could not open GitHub", true);
       }
     });
   }

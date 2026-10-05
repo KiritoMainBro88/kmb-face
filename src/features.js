@@ -6,11 +6,15 @@
   const BADGE_CLASS = "fbis-verified-badge";
   const HIDDEN_FEED_CLASS = "fbis-hidden-feed-item";
   const DiagnosticLogger = globalScope.FBISLogger;
+  const I18n = globalScope.FBISI18n ||
+    (typeof require === "function" ? require("./i18n.js") : null);
+  const t = (key, params) => I18n?.t?.(key, params) || key;
   const LIKE_CONFIRM_WINDOW_MS = 3000;
   const DEFAULT_SETTINGS = Object.freeze({
     fbis_enable_like_confirm: true,
     fbis_enable_cosmetic_badge: true,
-    fbis_clean_feed: true
+    fbis_clean_feed: true,
+    fbis_language: I18n?.DEFAULT_LANGUAGE || "auto"
   });
   const featureSettings = { ...DEFAULT_SETTINGS };
   const pendingLikeControls = new WeakMap();
@@ -18,6 +22,8 @@
   let lastKnownUrl = "";
   let currentUserName = "";
   let storyBusy = false;
+  let storyButton = null;
+  let likeConfirmationText = null;
   let utilityScanTimer = 0;
 
   function isStoryLocation(url) {
@@ -69,7 +75,8 @@
     return {
       fbis_enable_like_confirm: value.fbis_enable_like_confirm !== false,
       fbis_enable_cosmetic_badge: value.fbis_enable_cosmetic_badge !== false,
-      fbis_clean_feed: value.fbis_clean_feed !== false
+      fbis_clean_feed: value.fbis_clean_feed !== false,
+      fbis_language: I18n?.normalizeLanguagePreference?.(value.fbis_language) || "auto"
     };
   }
 
@@ -241,12 +248,12 @@
     if (storyBusy) return;
     storyBusy = true;
     const playbackGuard = pauseStoryPlayback();
-    setState?.("loading", "Đang lấy Story HD…");
+    setState?.("loading", t("toast_story_paused"));
     try {
       ensureMainWorldBridge();
       const response = await requestMainBridge("FBIS_RESOLVE_STORY", { storyId }, 3000);
       const story = response.story;
-      if (!story?.url) throw new Error("Không tìm thấy media Story HD.");
+      if (!story?.url) throw new Error(t("story_not_found"));
 
       if (story.type === "video") {
         const result = await chrome.runtime.sendMessage({
@@ -255,7 +262,7 @@
           videos: [{ url: story.url }]
         });
         if (!result?.ok && !result?.started) {
-          throw new Error(result?.error || "Không bắt đầu được tải Story video.");
+          throw new Error(result?.error || t("story_video_failed"));
         }
       } else {
         const result = await chrome.runtime.sendMessage({
@@ -264,13 +271,13 @@
           images: [{ url: story.url }]
         });
         if (!result?.ok && !result?.started) {
-          throw new Error(result?.error || "Không bắt đầu được tải Story ảnh.");
+          throw new Error(result?.error || t("story_image_failed"));
         }
       }
-      setState?.("done", "✓ Đã gửi Story HD");
+      setState?.("done", t("story_sent"));
     } catch (error) {
       DiagnosticLogger?.error("features", `STORY_DOWNLOAD_FAILED ${error instanceof Error ? error.message : "unknown"}`);
-      setState?.("error", error instanceof Error ? error.message : "Tải Story thất bại");
+      setState?.("error", error instanceof Error ? error.message : t("story_failed"));
     } finally {
       resumeStoryPlayback(playbackGuard);
       storyBusy = false;
@@ -299,7 +306,8 @@
     `;
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = "⚡ Tải Story (HD)";
+    button.textContent = t("download_story");
+    storyButton = button;
     button.addEventListener("click", () => {
       button.disabled = true;
       downloadStory(storyId, (state, text) => {
@@ -309,7 +317,7 @@
           globalScope.setTimeout(() => {
             button.disabled = false;
             button.classList.remove("error");
-            button.textContent = "⚡ Tải Story (HD)";
+            button.textContent = t("download_story");
           }, 1800);
         }
       });
@@ -339,6 +347,7 @@
 
   function clearLikeConfirmation(control = activeLikeControl) {
     if (!control) {
+      likeConfirmationText = null;
       removeLikePopover();
       return;
     }
@@ -346,6 +355,7 @@
     if (pending?.timer) globalScope.clearTimeout(pending.timer);
     pendingLikeControls.delete(control);
     if (activeLikeControl === control) activeLikeControl = null;
+    likeConfirmationText = null;
     removeLikePopover();
   }
 
@@ -361,7 +371,8 @@
     host.style.cssText = `all:initial;position:fixed;left:${Math.max(4, rect.left)}px;top:${Math.max(4, rect.top)}px;width:${Math.max(96, rect.width)}px;height:${Math.max(28, rect.height)}px;z-index:2147483647;pointer-events:none;`;
     const root = host.attachShadow({ mode: "closed" });
     const box = document.createElement("div");
-    box.textContent = "Click lại để xác nhận";
+    box.textContent = t("toast_like_confirm");
+    likeConfirmationText = box;
     box.style.cssText = "display:grid;width:100%;height:100%;min-height:28px;place-items:center;padding:4px 8px;border:1px solid rgba(117,170,255,.9);border-radius:9px;background:rgba(8,102,255,.94);color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.32);font:700 11px/1.15 system-ui,-apple-system,'Segoe UI',sans-serif;text-align:center;white-space:nowrap;";
     root.appendChild(box);
     document.documentElement.appendChild(host);
@@ -471,8 +482,10 @@
     try {
       const stored = await chrome.storage.local.get(DEFAULT_SETTINGS);
       Object.assign(featureSettings, normalizeFeatureSettings(stored));
+      I18n?.setPreference?.(featureSettings.fbis_language);
     } catch {
       Object.assign(featureSettings, DEFAULT_SETTINGS);
+      I18n?.setPreference?.(DEFAULT_SETTINGS.fbis_language);
     }
   }
 
@@ -493,6 +506,13 @@
     if (changes.fbis_clean_feed) {
       featureSettings.fbis_clean_feed = changes.fbis_clean_feed.newValue !== false;
       applyCleanFeed();
+    }
+    if (changes.fbis_language) {
+      featureSettings.fbis_language = I18n?.normalizeLanguagePreference?.(
+        changes.fbis_language.newValue
+      ) || "auto";
+      I18n?.setPreference?.(featureSettings.fbis_language);
+      refreshLocalizedFeatureUi();
     }
 
     if (shouldRescanBadges) {
@@ -517,6 +537,15 @@
       applyCosmeticBadges();
       applyCleanFeed();
     }, 180);
+  }
+
+  function refreshLocalizedFeatureUi() {
+    if (storyButton?.isConnected) {
+      storyButton.textContent = storyBusy ? t("story_loading") : t("download_story");
+    }
+    if (likeConfirmationText?.isConnected) {
+      likeConfirmationText.textContent = t("toast_like_confirm");
+    }
   }
 
   async function initializeBrowserFeatures() {

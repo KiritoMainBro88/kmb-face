@@ -26,7 +26,8 @@ jobs:
             lib \
             popup.html \
             LICENSE \
-            README.md
+            README.md \
+            README.vi.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

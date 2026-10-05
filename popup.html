@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="vi">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -37,8 +37,10 @@
       .advanced { margin-top: 12px; }
       .field { display: block; padding: 10px 12px; border: 1px solid rgba(255,255,255,.09); border-radius: 11px; background: #1b1e24; }
       .field span { display: block; margin-bottom: 6px; color: #aeb5c2; font-size: 10px; font-weight: 700; }
-      .field input { width: 100%; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 7px 8px; background: #111318; color: #f5f7fb; font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; outline: none; }
-      .field input:focus { border-color: #75aaff; box-shadow: 0 0 0 2px rgba(117,170,255,.16); }
+      .field input, .field select { width: 100%; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 7px 8px; background: #111318; color: #f5f7fb; font-size: 11px; outline: none; }
+      .field input { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+      .field input:focus, .field select:focus { border-color: #75aaff; box-shadow: 0 0 0 2px rgba(117,170,255,.16); }
+      .field + .field { margin-top: 8px; }
       .status { min-height: 16px; margin: 10px 1px 0; color: #62d58b; font-size: 10px; text-align: right; opacity: 0; transition: opacity .15s ease; }
       .status.show { opacity: 1; }
       .status.error { color: #ff8a8a; }
@@ -49,55 +51,64 @@
     </style>
   </head>
   <body>
-    <h1>Facebook Post Image Saver</h1>
-    <p class="sub">Cài đặt V1.1</p>
+    <h1 data-i18n="popup_title">kmb-face Settings</h1>
+    <p class="sub" data-i18n="popup_subtitle">Version 1.2.0</p>
 
     <section id="update-banner" class="update-banner" hidden aria-live="polite">
-      <span>🎉 Đã có bản mới (<strong id="update-version"></strong>)</span>
-      <button id="update-download" type="button">Tải ngay</button>
+      <span id="update-copy"></span>
+      <button id="update-download" type="button" data-i18n="btn_update">Update</button>
     </section>
 
-    <section class="card" aria-label="Tùy chọn">
+    <section class="card" aria-label="Settings">
       <label class="row">
-        <span class="copy">Xác nhận trước khi Like bài viết</span>
+        <span class="copy" data-i18n="setting_like_confirm">Confirm before Like</span>
         <span class="switch"><input id="like-confirm" type="checkbox" /><span class="track"></span></span>
       </label>
       <label class="row">
-        <span class="copy">Tích xanh trang trí<span class="hint">Chỉ hiển thị trên trình duyệt này</span></span>
+        <span class="copy" data-i18n="setting_verified_badge">Cosmetic Verified Badge</span>
         <span class="switch"><input id="cosmetic-badge" type="checkbox" /><span class="track"></span></span>
       </label>
       <label class="row">
-        <span class="copy">Tải kèm post_info.txt</span>
+        <span class="copy" data-i18n="setting_include_info">Include post_info.txt</span>
         <span class="switch"><input id="post-info" type="checkbox" /><span class="track"></span></span>
       </label>
       <label class="row">
-        <span class="copy">Clean Feed<span class="hint">Ẩn bài Tài trợ &amp; Gợi ý</span></span>
+        <span class="copy" data-i18n="setting_clean_feed">Clean Feed (Hide Sponsored &amp; Suggested)</span>
         <span class="switch"><input id="clean-feed" type="checkbox" /><span class="track"></span></span>
       </label>
     </section>
 
-    <section class="mode" aria-label="Chế độ tải mặc định">
-      <p class="mode-title">Chế độ tải mặc định</p>
+    <section class="mode" aria-label="Default download mode">
+      <p class="mode-title" data-i18n="setting_default_mode">Default download mode</p>
       <div class="segmented">
         <label><input type="radio" name="download-mode" value="zip" /><span>ZIP</span></label>
         <label><input type="radio" name="download-mode" value="manager" /><span>IDM Direct</span></label>
       </div>
     </section>
 
-    <section class="advanced" aria-label="Cài đặt nâng cao">
+    <section class="advanced" aria-label="Advanced settings">
+      <label class="field" for="language-select">
+        <span data-i18n="setting_language">Language</span>
+        <select id="language-select">
+          <option value="auto" data-i18n="language_auto">Auto</option>
+          <option value="vi" data-i18n="language_vi">Tiếng Việt</option>
+          <option value="en" data-i18n="language_en">English</option>
+        </select>
+      </label>
       <label class="field" for="filename-template">
-        <span>Tên file: {author} · {postId} · {index} · {date}</span>
+        <span data-i18n="setting_naming_template">Custom filename template</span>
         <input id="filename-template" type="text" maxlength="180" spellcheck="false" />
       </label>
     </section>
 
-    <div class="diagnostics" aria-label="Chẩn đoán lỗi">
-      <button id="copy-logs" type="button">📋 Copy Logs</button>
-      <button id="report-bug" type="button">🐛 Báo lỗi (GitHub)</button>
+    <div class="diagnostics" aria-label="Diagnostics">
+      <button id="copy-logs" type="button" data-i18n="btn_copy_logs">📋 Copy Logs</button>
+      <button id="report-bug" type="button" data-i18n="btn_report_issue">🐛 Report Issue (GitHub)</button>
     </div>
-    <p id="status" class="status" role="status" aria-live="polite">Đã lưu</p>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
     <script src="src/logger.js"></script>
     <script src="src/naming.js"></script>
+    <script src="src/i18n.js"></script>
     <script src="src/popup.js"></script>
   </body>
 </html>

@@ -1,68 +1,77 @@
 # kmb-face
 
+Language: **[ English ]** | [ Tiếng Việt ](README.vi.md)
+
 [![License GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-v1.1.0-0a7cff.svg)
+![Version](https://img.shields.io/badge/version-v1.2.0-0a7cff.svg)
 ![Node tests](https://img.shields.io/github/actions/workflow/status/KiritoMainBro88/kmb-face/ci.yml?branch=main&label=Node%20tests)
 ![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-34A853.svg)
 
-`kmb-face` là Chrome Extension Manifest V3 viết bằng Vanilla JavaScript để tải media từ nội dung Facebook mà người dùng đang xem. Extension hỗ trợ ảnh, video/Reels, Story, media trong bình luận, ZIP và chế độ gửi link trực tiếp cho IDM/FDM.
+`kmb-face` is a lightweight Chrome Manifest V3 extension written in vanilla JavaScript for saving media from Facebook content that is already visible in your browser. It supports photos, HD video/Reels, Stories, comment media, ZIP packaging, direct IDM/FDM handoff, Clean Feed filtering, custom filenames, and a bilingual Vietnamese/English interface.
 
-## Cài đặt trong 3 bước
+## Install in 3 steps
 
-1. Tải file ZIP mới nhất tại [GitHub Releases](https://github.com/KiritoMainBro88/kmb-face/releases) rồi giải nén ra một thư mục.
-2. Mở `chrome://extensions/`, bật **Developer mode**.
-3. Chọn **Load unpacked** và trỏ tới thư mục vừa giải nén có `manifest.json`.
+1. Download the latest ZIP from [GitHub Releases](https://github.com/KiritoMainBro88/kmb-face/releases) and extract it to a folder.
+2. Open `chrome://extensions/` and enable **Developer mode**.
+3. Click **Load unpacked** and select the extracted folder containing `manifest.json`.
 
-Sau khi cập nhật extension thủ công, bấm **Reload** trong `chrome://extensions/` và refresh tab Facebook.
+After replacing files with a newer version, click **Reload** in `chrome://extensions/` and refresh your Facebook tab.
 
-## Tính năng chính
+## Highlights
 
-- **1-Click Feed Download**: gắn quick action trực tiếp lên post, hỗ trợ ZIP, IDM/FDM Direct và Copy link HD.
-- **Photo carousel scanner**: lấy ảnh lớn trong viewer, xử lý post có `+N`, loại trùng theo media identity.
-- **Video & Reels**: ưu tiên URL MP4 HD từ metadata Facebook; video lớn được tải riêng để tránh tăng RAM khi đóng ZIP.
-- **Story Saver**: nút `⚡ Tải Story (HD)` trên viewer Story, có pause guard trong lúc resolve/download rồi phát tiếp khi phù hợp.
-- **Comment Media Harvester**: gom ảnh/video đã tải trong vùng bình luận vào `comments_media/` trong ZIP.
-- **Like Confirmation**: cơ chế two-step click trong 3 giây để hạn chế bấm nhầm Like.
-- **Fake Badge / Cosmetic Verified Badge**: tích xanh trang trí client-side chỉ hiển thị trong trình duyệt của bạn.
-- **Settings Popup**: bật/tắt Like Confirmation, Cosmetic Badge, `post_info.txt`, và chọn ZIP hoặc IDM Direct làm chế độ mặc định.
-- **Auto-Update Checker**: kiểm tra GitHub Releases mỗi 12 giờ, hiển thị badge `NEW` và banner tải bản mới trong popup.
-- **Clean Feed**: mặc định ẩn bài `Sponsored` / `Được tài trợ`, `Suggested for you` / `Gợi ý cho bạn` và `Reels và video ngắn`; có thể tắt trong popup.
-- **Custom Filename Template**: đặt mẫu tên file với `{author}`, `{postId}`, `{index}` và `{date}` cho media tải trực tiếp và file media trong ZIP.
-- **Diagnostic Reporter**: ring logger 50 sự kiện gần nhất, tự khử `fb_dtsg`, `c_user`, session ID và cookie/authorization trước khi copy hoặc mở GitHub Issue.
+- **Zero-Click Feed Awareness**: eligible Facebook posts are detected automatically and receive an on-post quick action. Downloads still require an explicit user click.
+- **One-Click Media Actions**: download ZIPs, send links to IDM/FDM, copy HD links, or harvest loaded comment media directly from the post overlay.
+- **Photo Carousel Scanner**: traverses Facebook photo viewers, handles `+N` posts, prefers larger renditions, and removes duplicate media identities.
+- **Video & Reels**: prefers HD MP4 URLs exposed by Facebook metadata and keeps large videos outside ZIP memory when necessary.
+- **Story Saver**: adds a Story download action, pauses playback while resolving/downloading when possible, then resumes playback safely.
+- **Clean Feed**: hides Sponsored, Suggested for you, and short-form recommendation blocks. The feature is enabled by default and can be disabled from the popup.
+- **Comment Media Harvester**: collects loaded photo/video media from comments and stores it under `comments_media/` inside the ZIP.
+- **Custom Filename Template**: supports `{author}`, `{postId}`, `{index}`, and `{date}` for direct downloads and media stored inside ZIP files.
+- **Bilingual UI**: choose **Auto**, **Tiếng Việt**, or **English**. Auto mode uses `navigator.language`, selecting Vietnamese for `vi-*` locales and English otherwise.
+- **Auto-Update Checker**: polls the latest GitHub Release every 12 hours and displays a `NEW` badge plus an update banner when a newer semantic version exists.
+- **Like Confirmation**: requires a second click within three seconds before a Like action proceeds, reducing accidental reactions.
+- **Cosmetic Verified Badge**: adds a local client-side visual badge for the current user. It does not alter Facebook account verification.
+- **Diagnostic Reporter**: stores the latest 50 sanitized diagnostic events and strips common Facebook/session credentials before Copy Logs or GitHub issue generation.
+- **Anti-Checkpoint Mindset**: the extension avoids automated login flows, cookie permissions, and background account actions. It works with content already available in the active browser session and keeps user-triggered actions explicit.
 
-## Cách dùng nhanh
+## Language settings
 
-### Tải media từ bài viết
+Open the extension popup and choose:
 
-Mở Facebook và tìm post có ảnh/video. Quick action xuất hiện trên media của post. Click nút chính để dùng chế độ mặc định hoặc mở menu phụ để chọn ZIP, IDM/FDM Direct, Copy link HD hoặc quét media bình luận.
+- **Auto**: Vietnamese when `navigator.language` starts with `vi`; English for other locales.
+- **Tiếng Việt**: always use Vietnamese.
+- **English**: always use English.
 
-### Tải Story
+The setting is stored as `fbis_language` in `chrome.storage.local`. Existing feed actions and Story controls update when the language changes.
 
-Mở đường dẫn `facebook.com/stories/...`, sau đó click **⚡ Tải Story (HD)** ở viewer.
+## Quick usage
 
-### Báo lỗi
+### Download media from a post
 
-Mở popup extension:
+Open Facebook and find a post containing photos or video. Use the quick action displayed on the media area, or open its menu to choose ZIP, IDM/FDM Direct, Copy HD Links, or Comment Media harvesting.
 
-- **📋 Copy Logs**: copy environment + tối đa 50 diagnostic events đã sanitize.
-- **🐛 Báo lỗi (GitHub)**: mở trang tạo Issue với log và thông tin môi trường được điền sẵn.
+### Download a Story
 
-Reporter không tự đính kèm cookie hoặc credential Facebook.
+Open a `facebook.com/stories/...` URL and use the Story download button shown by the extension.
 
-## Quyền extension
+### Report a problem
 
-- `downloads`: tải ZIP/MP4 hoặc gửi media URL qua Chrome download pipeline.
-- `clipboardWrite`: Copy link HD và Copy Logs.
-- `storage`: lưu các tùy chọn trong popup bằng `chrome.storage.local`.
-- `alarms`: chạy kiểm tra cập nhật tự động mỗi 12 giờ.
-- `host_permissions` cho `facebook.com`, `fbcdn.net`, `fbsbx.com`: chạy content script và fetch media từ các host Facebook cần thiết.
-- `host_permissions` cho `api.github.com`: đọc GitHub Release mới nhất để kiểm tra cập nhật.
+Open the popup and use **Copy Logs** or **Report Issue (GitHub)**. Diagnostic output is sanitized before it is copied or inserted into an issue template.
 
-Extension không yêu cầu quyền `cookies` hoặc `webRequest`.
+## Permissions
 
-## Phát triển
+- `downloads`: start ZIP/MP4 downloads or send media URLs through Chrome's download pipeline.
+- `clipboardWrite`: copy HD links and diagnostic logs.
+- `storage`: store popup settings, language preference, update state, and filename template.
+- `alarms`: run the 12-hour update check.
+- Host permissions for `facebook.com`, `fbcdn.net`, and `fbsbx.com`: run the content script and fetch supported Facebook media.
+- Host permission for `api.github.com`: read the latest GitHub Release metadata.
 
-Yêu cầu Node.js 20+.
+The extension does not request `cookies` or `webRequest` permissions.
+
+## Development
+
+Requires Node.js 20+.
 
 ```powershell
 # Syntax check
@@ -73,18 +82,18 @@ Get-ChildItem src,tests,lib -Recurse -File | Where-Object Extension -in '.js','.
 node --test tests/*.test.cjs
 ```
 
-GitHub Actions chạy test trên Node.js 20.x và 22.x cho mọi push/pull request vào `main`.
+GitHub Actions runs the test suite on Node.js 20.x and 22.x for pushes and pull requests targeting `main`.
 
-## Release
+## Releases
 
-Push tag dạng `v*` sẽ chạy workflow release, đóng gói đúng các file extension cần thiết thành `kmb-face-<tag>.zip` và tạo GitHub Release tự động.
+Pushing a `v*` tag triggers the release workflow, packages the extension as `kmb-face-<tag>.zip`, and creates a GitHub Release automatically.
 
 ## Disclaimer
 
-Dự án phục vụ mục đích nghiên cứu và sử dụng cá nhân. Người dùng chịu trách nhiệm tuân thủ quyền sở hữu nội dung, điều khoản của nền tảng và pháp luật áp dụng khi tải hoặc sử dụng media.
+This project is intended for research and personal use. You are responsible for complying with content ownership rights, Facebook's applicable terms, and local law when downloading or reusing media.
 
-`kmb-face` không có backend riêng để thu thập hoặc lưu trữ dữ liệu người dùng. Diagnostic logger hoạt động trong bộ nhớ của extension và chỉ tạo báo cáo khi người dùng chủ động bấm Copy Logs hoặc Báo lỗi.
+`kmb-face` has no standalone backend for collecting or storing user data. Diagnostic logs are maintained locally by the extension and are exported only when the user explicitly chooses to copy or report them.
 
 ## License
 
-Phát hành theo [GNU General Public License v3.0](LICENSE).
+Released under the [GNU General Public License v3.0](LICENSE).
