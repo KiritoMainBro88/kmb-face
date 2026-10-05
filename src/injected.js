@@ -3,20 +3,21 @@
   if (window.__FBIS_PAYLOAD_BRIDGE__) return;
   window.__FBIS_PAYLOAD_BRIDGE__ = true;
 
-  const SOURCE = "FBIS_MAIN";
-  const ALLOWED_HOSTS = ["fbcdn.net", "facebook.com", "fbsbx.com"];
+  const Constants = window.FBISConstants ||
+    (typeof require === "function" ? require("./constants.js") : null);
+  const { IPC_ACTIONS, MEDIA_HOSTS, MESSAGE_SOURCES } = Constants;
 
   window.addEventListener("message", (event) => {
     const message = event.data;
-    if (event.source !== window || message?.source !== "FBIS_CONTENT") return;
+    if (event.source !== window || message?.source !== MESSAGE_SOURCES.CONTENT) return;
     if (!message.requestId) return;
 
-    if (message.type === "FBIS_RESOLVE_STORY") {
+    if (message.type === IPC_ACTIONS.RESOLVE_STORY) {
       try {
         const story = collectStoryMedia(message.storyId);
         window.postMessage({
-          source: SOURCE,
-          type: "FBIS_RESOLVE_STORY_RESULT",
+          source: MESSAGE_SOURCES.MAIN,
+          type: IPC_ACTIONS.RESOLVE_STORY_RESULT,
           requestId: message.requestId,
           ok: Boolean(story),
           story,
@@ -24,8 +25,8 @@
         }, "*");
       } catch (error) {
         window.postMessage({
-          source: SOURCE,
-          type: "FBIS_RESOLVE_STORY_RESULT",
+          source: MESSAGE_SOURCES.MAIN,
+          type: IPC_ACTIONS.RESOLVE_STORY_RESULT,
           requestId: message.requestId,
           ok: false,
           story: null,
@@ -35,13 +36,13 @@
       return;
     }
 
-    if (message.type !== "FBIS_RESOLVE_POST") return;
+    if (message.type !== IPC_ACTIONS.RESOLVE_POST) return;
 
     try {
       const media = collectFromSerializedPayload(message.postId);
       window.postMessage({
-        source: SOURCE,
-        type: "FBIS_RESOLVE_POST_RESULT",
+        source: MESSAGE_SOURCES.MAIN,
+        type: IPC_ACTIONS.RESOLVE_POST_RESULT,
         requestId: message.requestId,
         ok: media.images.length > 0 || media.videos.length > 0,
         images: media.images,
@@ -52,8 +53,8 @@
       }, "*");
     } catch (error) {
       window.postMessage({
-        source: SOURCE,
-        type: "FBIS_RESOLVE_POST_RESULT",
+        source: MESSAGE_SOURCES.MAIN,
+        type: IPC_ACTIONS.RESOLVE_POST_RESULT,
         requestId: message.requestId,
         ok: false,
         images: [],
@@ -216,7 +217,7 @@
   function isAllowedMediaUrl(url) {
     try {
       const parsed = new URL(url);
-      return parsed.protocol === "https:" && ALLOWED_HOSTS.some(
+      return parsed.protocol === "https:" && MEDIA_HOSTS.some(
         (host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`)
       );
     } catch {

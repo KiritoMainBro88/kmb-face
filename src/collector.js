@@ -1,28 +1,56 @@
-(function initializeCollector(globalScope) {
+(function initializeCollector(/** @type {any} */ globalScope) {
   "use strict";
 
   if (globalScope.FacebookAlbumCollector) {
     return;
   }
 
+  const Constants = globalScope.FBISConstants ||
+    (typeof require === "function" ? require("./constants.js") : null);
+  const { LIMITS, MEDIA_HOSTS, SELECTORS, TIMINGS } = Constants;
+
+  /**
+   * @typedef {Object} MediaItem
+   * @property {string} url
+   * @property {'image'|'video'} type
+   * @property {string} filename
+   * @property {number=} size
+   */
+
+  /**
+   * @typedef {Object} PostMetadata
+   * @property {string} id
+   * @property {string} author
+   * @property {string} timestamp
+   * @property {string} text
+   */
+
+  /**
+   * @typedef {Object} CollectorResult
+   * @property {MediaItem[]} items
+   * @property {PostMetadata} metadata
+   * @property {boolean} isComplete
+   */
   const NEXT_LABEL_PATTERN = /(?:next(?:\s+photo)?|ảnh\s+tiếp(?:\s+theo)?|tiếp\s+theo|suivante?|prochaine?|weiter|siguiente|avanti|seguente|следующ|下一|次へ|다음)/i;
   const PREVIOUS_LABEL_PATTERN = /(?:previous|prev|ảnh\s+trước|trước|précéd|zurück|anterior|indietro|предыдущ|上一|前へ|이전)/i;
   const CLOSE_LABEL_PATTERN = /(?:close|đóng|quay\s+lại|fermer|schließen|cerrar|chiudi|закрыть|关闭|閉じる|닫기)/i;
   const DISALLOWED_GEOMETRY_LABEL_PATTERN = /(?:like|comment|share|menu|reaction|zoom|fullscreen|thích|bình\s+luận|chia\s+sẻ|phóng|toàn\s+màn|đóng)/i;
-  const MEDIA_URL_HOSTS = ["fbcdn.net", "facebook.com", "fbsbx.com"];
+  const MEDIA_URL_HOSTS = MEDIA_HOSTS;
 
   class CarouselCollector {
+    /** @param {Object} [options={}] */
     constructor(options = {}) {
       this.document = options.document || globalScope.document;
       this.window = options.window || globalScope.window;
-      this.pollInterval = options.pollInterval || 120;
-      this.openTimeout = options.openTimeout || 12000;
-      this.changeTimeout = options.changeTimeout || 6500;
-      this.keyboardRetryTimeout = options.keyboardRetryTimeout || 900;
+      this.pollInterval = options.pollInterval || TIMINGS.COLLECTOR_POLL_INTERVAL_MS;
+      this.openTimeout = options.openTimeout || TIMINGS.VIEWER_OPEN_TIMEOUT_MS;
+      this.changeTimeout = options.changeTimeout || TIMINGS.VIEWER_CHANGE_TIMEOUT_MS;
+      this.keyboardRetryTimeout = options.keyboardRetryTimeout || TIMINGS.KEYBOARD_RETRY_TIMEOUT_MS;
       this.keyboardRetryLimit = toPositiveInteger(options.keyboardRetryLimit) || 3;
-      this.safetyLimit = toPositiveInteger(options.safetyLimit) || 500;
+      this.safetyLimit = toPositiveInteger(options.safetyLimit) || LIMITS.MAX_SAFETY_IMAGES;
     }
 
+    /** @param {*} postContainer @param {Object} [options={}] @returns {Promise<Object>} */
     async collectFromPost(postContainer, options = {}) {
       if (!postContainer?.isConnected) {
         throw new Error("Bài viết đã thay đổi trên trang. Hãy chọn lại bài viết.");
@@ -49,6 +77,7 @@
       });
     }
 
+    /** @param {Object} [options={}] @returns {Promise<Object>} */
     async collectOpenViewer(options = {}) {
       let current = await this.waitForReadyViewerState(null, this.openTimeout, options.isCancelled);
       if (!current) {
@@ -114,6 +143,7 @@
       };
     }
 
+    /** @param {Function=} isCancelled @param {*=} stateBeforeOpen @returns {Promise<*>} */
     async waitForViewerToOpen(isCancelled, stateBeforeOpen = null) {
       const deadline = Date.now() + this.openTimeout;
       while (Date.now() < deadline) {
@@ -136,7 +166,12 @@
       return null;
     }
 
-    async waitForNextControl(viewerImage, isCancelled, timeout = 1800) {
+    /** @param {*} viewerImage @param {Function=} isCancelled @param {number=} timeout @returns {Promise<*>} */
+    async waitForNextControl(
+      viewerImage,
+      isCancelled,
+      timeout = TIMINGS.NEXT_CONTROL_TIMEOUT_MS
+    ) {
       const deadline = Date.now() + timeout;
       while (Date.now() < deadline) {
         if (isCancelled?.()) {
@@ -151,6 +186,7 @@
       return null;
     }
 
+    /** @param {*} current @param {Function=} isCancelled @returns {Promise<*>} */
     async advanceViewer(current, isCancelled) {
       const labelledControl = findNextControl(this.document, this.window, current.element, {
         allowGeometry: false
@@ -198,6 +234,7 @@
       return null;
     }
 
+    /** @param {*} previous @param {number} timeout @param {Function=} isCancelled @returns {Promise<*>} */
     async waitForReadyViewerState(previous, timeout, isCancelled) {
       const deadline = Date.now() + timeout;
       let candidate = null;
@@ -231,7 +268,7 @@
             if (typeof state.element.decode === "function") {
               await Promise.race([
                 state.element.decode().catch(() => undefined),
-                delay(1200)
+                delay(TIMINGS.IMAGE_DECODE_TIMEOUT_MS)
               ]);
             }
             const confirmed = readViewerState(this.document, this.window, previous);
@@ -255,6 +292,7 @@
     }
   }
 
+  /** @param {*} doc @param {*} win @param {*=} previous @returns {*|null} */
   function readViewerState(doc, win, previous = null) {
     const element = findBestViewerImage(doc, win, previous?.sourceIdentity);
     if (!element) {
@@ -278,15 +316,16 @@
       identity: photoId ? `fbid:${photoId}` : sourceIdentity,
       width: element.naturalWidth || 0,
       height: element.naturalHeight || 0,
-      alt: String(element.alt || "").slice(0, 500)
+      alt: String(element.alt || "").slice(0, LIMITS.MAX_ALT_TEXT_LENGTH)
     };
   }
 
+  /** @param {*} doc @param {*} win @param {string=} _previousSourceIdentity @returns {*|null} */
   function findBestViewerImage(doc, win, _previousSourceIdentity = "") {
     const viewerScope = findActiveViewerScope(doc, win);
     const candidates = Array.from(
       (viewerScope || doc).querySelectorAll(
-        'img[data-visualcompletion="media-vc-image"], [role="main"] img, img'
+        SELECTORS.VIEWER.IMAGE_CANDIDATES
       )
     );
     const uniqueCandidates = Array.from(new Set(candidates));
@@ -295,7 +334,11 @@
 
     for (const image of uniqueCandidates) {
       const rect = safeRect(image);
-      if (!isVisibleElement(image, rect, win) || rect.width < 160 || rect.height < 120) {
+      if (
+        !isVisibleElement(image, rect, win) ||
+        rect.width < LIMITS.MIN_VIEWER_WIDTH ||
+        rect.height < LIMITS.MIN_VIEWER_HEIGHT
+      ) {
         continue;
       }
 
@@ -323,15 +366,16 @@
     return best;
   }
 
+  /** @param {*} doc @param {*} win @param {*} viewerImage @param {Object} [options={}] @returns {*|null} */
   function findNextControl(doc, win, viewerImage, options = {}) {
     const viewerScope =
-      viewerImage?.closest?.('[role="main"], main, [role="dialog"]') ||
+      viewerImage?.closest?.(SELECTORS.VIEWER.SCOPE_OR_DIALOG) ||
       findActiveViewerScope(doc, win) ||
       doc;
-    const labelledCandidates = Array.from(viewerScope.querySelectorAll("[aria-label]"))
+    const labelledCandidates = Array.from(viewerScope.querySelectorAll(SELECTORS.CONTROLS.LABELLED))
       .map((element) => {
         const label = String(element.getAttribute("aria-label") || "").trim();
-        const clickable = element.closest('button, [role="button"]') || element;
+        const clickable = element.closest(SELECTORS.CONTROLS.CLICKABLE) || element;
         return { element: clickable, label };
       })
       .filter(({ element, label }) => {
@@ -359,10 +403,11 @@
     return findGeometryNextControl(doc, win, viewerImage, viewerScope);
   }
 
+  /** @param {*} doc @param {*} win @param {*} viewerImage @param {*=} knownViewerScope @returns {*|null} */
   function findGeometryNextControl(doc, win, viewerImage, knownViewerScope = null) {
     const viewerScope =
       knownViewerScope ||
-      viewerImage?.closest?.('[role="main"], main, [role="dialog"]') ||
+      viewerImage?.closest?.(SELECTORS.VIEWER.SCOPE_OR_DIALOG) ||
       findActiveViewerScope(doc, win) ||
       doc;
 
@@ -375,7 +420,7 @@
     let best = null;
     let bestScore = -Infinity;
 
-    for (const control of viewerScope.querySelectorAll('button, [role="button"]')) {
+    for (const control of viewerScope.querySelectorAll(SELECTORS.CONTROLS.CLICKABLE)) {
       const rect = safeRect(control);
       const label = String(control.getAttribute("aria-label") || "");
       if (
@@ -400,6 +445,7 @@
     return best;
   }
 
+  /** @param {*} doc @param {*} win @returns {boolean} */
   function dispatchNextKeyboardEvent(doc, win) {
     const KeyboardEventCtor = win?.KeyboardEvent || globalScope.KeyboardEvent;
     if (typeof doc?.dispatchEvent !== "function" || typeof KeyboardEventCtor !== "function") {
@@ -418,21 +464,26 @@
     return true;
   }
 
+  /** @param {*} doc @param {*} win @returns {*|null} */
   function findActiveViewerScope(doc, win) {
     let best = null;
     let bestScore = -Infinity;
 
-    for (const scope of doc.querySelectorAll('[role="main"], main')) {
+    for (const scope of doc.querySelectorAll(SELECTORS.VIEWER.SCOPE)) {
       const scopeRect = safeRect(scope);
       if (!isVisibleElement(scope, scopeRect, win)) {
         continue;
       }
 
       const mediaImages = Array.from(
-        scope.querySelectorAll('img[data-visualcompletion="media-vc-image"]')
+        scope.querySelectorAll(SELECTORS.VIEWER.MEDIA_IMAGE)
       ).filter((image) => {
         const rect = safeRect(image);
-        return isVisibleElement(image, rect, win) && rect.width >= 160 && rect.height >= 120;
+        return (
+          isVisibleElement(image, rect, win) &&
+          rect.width >= LIMITS.MIN_VIEWER_WIDTH &&
+          rect.height >= LIMITS.MIN_VIEWER_HEIGHT
+        );
       });
       if (mediaImages.length === 0) {
         continue;
@@ -444,7 +495,7 @@
           return rect.width * rect.height;
         })
       );
-      const hasCarouselControl = Array.from(scope.querySelectorAll("[aria-label]")).some((element) => {
+      const hasCarouselControl = Array.from(scope.querySelectorAll(SELECTORS.CONTROLS.LABELLED)).some((element) => {
         const label = String(element.getAttribute("aria-label") || "");
         return NEXT_LABEL_PATTERN.test(label) || PREVIOUS_LABEL_PATTERN.test(label);
       });
@@ -462,9 +513,10 @@
     return best;
   }
 
+  /** @param {*} [doc=globalScope.document] @param {*} [win=globalScope.window] @returns {*|null} */
   function findActivePostContainer(doc = globalScope.document, win = globalScope.window) {
     return (
-      Array.from(doc.querySelectorAll('[role="dialog"]'))
+      Array.from(doc.querySelectorAll(SELECTORS.MODAL.DIALOG))
         .filter(
           (dialog) =>
             isVisibleElement(dialog, safeRect(dialog), win) && hasPostMedia(dialog)
@@ -477,6 +529,7 @@
     );
   }
 
+  /** @param {*} target @returns {*|null} */
   function findPostContainerFromTarget(target) {
     if (!(target instanceof globalScope.Element)) {
       return null;
@@ -497,12 +550,17 @@
     if (getPostPhotoLinks(container).length > 0 || getPostVideoRefs(container).length > 0) {
       return true;
     }
-    return Array.from(container.querySelectorAll("img")).some((image) => {
+    return Array.from(container.querySelectorAll(SELECTORS.MEDIA.IMAGE)).some((image) => {
       const rect = safeRect(image);
-      return rect.width >= 150 && rect.height >= 100 && isAllowedMediaUrl(image.currentSrc || image.src);
+      return (
+        rect.width >= LIMITS.MIN_POST_MEDIA_WIDTH &&
+        rect.height >= LIMITS.MIN_POST_MEDIA_HEIGHT &&
+        isAllowedMediaUrl(image.currentSrc || image.src)
+      );
     });
   }
 
+  /** @param {*} container @returns {Array<Object>} */
   function getPostVideoRefs(container) {
     if (!container?.querySelectorAll) {
       return [];
@@ -517,7 +575,7 @@
       results.push(item);
     };
 
-    for (const video of container.querySelectorAll("video")) {
+    for (const video of container.querySelectorAll(SELECTORS.MEDIA.VIDEO)) {
       if (isInExcludedPostSubtree(video, container)) continue;
       const directUrl = [video.currentSrc, video.src]
         .find((url) => isAllowedVideoUrl(url)) || "";
@@ -529,7 +587,7 @@
       });
     }
 
-    for (const link of container.querySelectorAll('a[href*="/reel/"], a[href*="/videos/"], a[href*="watch/?v="], a[href*="video.php"]')) {
+    for (const link of container.querySelectorAll(SELECTORS.POST.VIDEO_LINKS)) {
       if (isInExcludedPostSubtree(link, container)) continue;
       const href = link.href || link.getAttribute("href") || "";
       push({
@@ -544,16 +602,17 @@
     return concrete.length > 0 ? concrete : results.slice(0, 1);
   }
 
+  /** @param {*} postContainer @returns {Array<Object>} */
   function collectCommentMedia(postContainer) {
     if (!postContainer?.querySelectorAll) {
       return [];
     }
 
     const candidates = new Set();
-    for (const article of postContainer.querySelectorAll('div[role="article"]')) {
+    for (const article of postContainer.querySelectorAll(SELECTORS.COMMENT.ARTICLE)) {
       if (article !== postContainer) candidates.add(article);
     }
-    for (const labelled of postContainer.querySelectorAll('[aria-label]')) {
+    for (const labelled of postContainer.querySelectorAll(SELECTORS.CONTROLS.LABELLED)) {
       const label = String(labelled.getAttribute?.("aria-label") || "");
       if (/(?:bình\s*luận|binh\s*luan|comments?)/i.test(label)) candidates.add(labelled);
     }
@@ -563,13 +622,13 @@
       const media = [];
       let mediaIndex = 0;
 
-      for (const image of comment.querySelectorAll?.("img") || []) {
+      for (const image of comment.querySelectorAll?.(SELECTORS.MEDIA.IMAGE) || []) {
         const url = getBestImageUrl(image);
         const rect = safeRect(image);
         if (
           !url ||
-          rect.width < 100 ||
-          rect.height < 100 ||
+          rect.width < LIMITS.MIN_COMMENT_MEDIA_SIZE ||
+          rect.height < LIMITS.MIN_COMMENT_MEDIA_SIZE ||
           /(?:\/stickers?\/|sticker_|emoji|emote)/i.test(url)
         ) {
           continue;
@@ -606,13 +665,16 @@
     return results;
   }
 
+  /** @param {*} comment @returns {string} */
   function getCommentAuthor(comment) {
-    const authorNode = comment?.querySelector?.('h3 a, h4 a, strong a, a[role="link"]');
-    return cleanCaptionText(authorNode?.textContent || "Facebook User").slice(0, 80) || "Facebook User";
+    const authorNode = comment?.querySelector?.(SELECTORS.COMMENT.AUTHOR);
+    return cleanCaptionText(authorNode?.textContent || "Facebook User")
+      .slice(0, LIMITS.MAX_FILE_PART_LENGTH) || "Facebook User";
   }
 
+  /** @param {*} comment @returns {string} */
   function extractCommentId(comment) {
-    for (const anchor of comment?.querySelectorAll?.("a[href]") || []) {
+    for (const anchor of comment?.querySelectorAll?.(SELECTORS.COMMENT.LINK) || []) {
       const href = anchor.href || anchor.getAttribute?.("href") || "";
       try {
         const parsed = new URL(href, "https://www.facebook.com/");
@@ -625,13 +687,15 @@
         // Ignore malformed comment links.
       }
     }
-    return String(comment?.getAttribute?.("data-commentid") || "unknown").slice(0, 80) || "unknown";
+    return String(comment?.getAttribute?.("data-commentid") || "unknown")
+      .slice(0, LIMITS.MAX_FILE_PART_LENGTH) || "unknown";
   }
 
   function locationHrefForElement(element) {
     return element?.ownerDocument?.defaultView?.location?.href || globalScope.location?.href || "";
   }
 
+  /** @param {*} url @returns {string|null} */
   function extractVideoId(url) {
     try {
       const parsed = new URL(url, "https://www.facebook.com/");
@@ -646,6 +710,7 @@
     }
   }
 
+  /** @param {*} url @returns {boolean} */
   function isAllowedVideoUrl(url) {
     if (typeof url !== "string" || !url || url.startsWith("blob:")) {
       return false;
@@ -669,6 +734,7 @@
     }
   }
 
+  /** @param {*} container @returns {Array<*>} */
   function getPostPhotoLinks(container) {
     if (!container?.querySelectorAll) {
       return [];
@@ -677,7 +743,7 @@
     const seen = new Set();
     const fallbackLinks = [];
     const postSetGroups = new Map();
-    for (const link of container.querySelectorAll('a[href*="/photo/"], a[href*="photo.php"]')) {
+    for (const link of container.querySelectorAll(SELECTORS.POST.PHOTO_LINKS)) {
       if (isInExcludedPostSubtree(link, container)) {
         continue;
       }
@@ -709,6 +775,7 @@
     return groups.find((group) => group.some((link) => extractOverlayCount(link))) || groups[0];
   }
 
+  /** @param {*} element @param {*} container @returns {boolean} */
   function isInExcludedPostSubtree(element, container) {
     for (let current = element?.parentElement; current && current !== container; current = current.parentElement) {
       const role = String(current.getAttribute?.("role") || "").toLowerCase();
@@ -726,6 +793,7 @@
     return false;
   }
 
+  /** @param {*} container @returns {{expected:number|null, renderedLinks:number, additional:number, overlayIndex:number|null}} */
   function estimateExpectedCount(container) {
     const links = getPostPhotoLinks(container);
     for (let index = 0; index < links.length; index += 1) {
@@ -748,6 +816,7 @@
     };
   }
 
+  /** @param {*} link @returns {number|null} */
   function extractOverlayCount(link) {
     const text = String(link.textContent || "").replace(/\s+/g, " ").trim();
     const directMatch = text.match(/^\+\s*(\d{1,3})$/);
@@ -760,18 +829,22 @@
     return labelledMatch ? toPositiveInteger(labelledMatch[1]) : null;
   }
 
+  /** @param {*} container @returns {string} */
   function getPostSummary(container) {
     const label = String(container?.getAttribute?.("aria-label") || "").trim();
     const labelledAuthor = label.match(/bài\s+viết\s+của\s+(.+)/i)?.[1];
     if (labelledAuthor) {
-      return `Bài viết của ${labelledAuthor.slice(0, 80)}`;
+      return `Bài viết của ${labelledAuthor.slice(0, LIMITS.MAX_FILE_PART_LENGTH)}`;
     }
 
-    const authorLink = container?.querySelector?.('h2 a, h3 a, h4 a, a[href*="/user/"]');
+    const authorLink = container?.querySelector?.(SELECTORS.POST.AUTHOR);
     const author = String(authorLink?.textContent || "").replace(/\s+/g, " ").trim();
-    return author ? `Bài viết của ${author.slice(0, 80)}` : "Bài viết Facebook đã chọn";
+    return author
+      ? `Bài viết của ${author.slice(0, LIMITS.MAX_FILE_PART_LENGTH)}`
+      : "Bài viết Facebook đã chọn";
   }
 
+  /** @param {*} url @returns {string|null} */
   function extractPostId(url) {
     try {
       const parsed = new URL(url, "https://www.facebook.com/");
@@ -789,14 +862,16 @@
     }
   }
 
+  /** @param {*} value @returns {string} */
   function cleanCaptionText(value) {
     return String(value || "")
       .replace(/(?:Xem thêm|See more)/gi, " ")
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 20000);
+      .slice(0, LIMITS.MAX_CAPTION_LENGTH);
   }
 
+  /** @param {*} container @param {string=} pageUrl @returns {Object} */
   function extractPostMetadata(container, pageUrl = globalScope.location?.href || "") {
     const photoLinks = getPostPhotoLinks(container);
     const firstPhotoUrl = photoLinks[0]?.href || photoLinks[0]?.getAttribute?.("href") || "";
@@ -804,7 +879,7 @@
     const firstVideoUrl = videoRefs.find((video) => video.permalink)?.permalink || "";
     const summary = getPostSummary(container);
     const author = summary.replace(/^Bài viết của\s+/i, "").trim() || "Facebook";
-    const safeAnchors = Array.from(container?.querySelectorAll?.("a[href]") || []).filter(
+    const safeAnchors = Array.from(container?.querySelectorAll?.(SELECTORS.POST.ANY_LINK) || []).filter(
       (anchor) => !isInExcludedPostSubtree(anchor, container)
     );
     const permalinkAnchor = safeAnchors.find((anchor) => {
@@ -820,7 +895,7 @@
       extractPostId(pageUrl) ||
       "unknown";
     const timestampNode = Array.from(
-      container?.querySelectorAll?.("time[datetime], abbr[data-utime]") || []
+      container?.querySelectorAll?.(SELECTORS.POST.TIMESTAMP) || []
     ).find((node) => !isInExcludedPostSubtree(node, container));
     const timestamp =
       timestampNode?.getAttribute?.("datetime") ||
@@ -829,11 +904,7 @@
       "";
 
     let caption = "";
-    for (const selector of [
-      '[data-ad-preview="message"]',
-      '[data-ad-comet-preview="message"]',
-      'div[dir="auto"]'
-    ]) {
+    for (const selector of SELECTORS.CAPTION) {
       const candidates = Array.from(container?.querySelectorAll?.(selector) || [])
         .filter((node) => !isInExcludedPostSubtree(node, container))
         .map((node) => cleanCaptionText(node.textContent || ""))
@@ -848,6 +919,7 @@
     return { postId, author, timestamp, permalink, caption };
   }
 
+  /** @param {*} image @returns {string} */
   function getBestImageUrl(image) {
     const candidates = [];
     if (image.currentSrc) {
@@ -872,6 +944,7 @@
     return candidates.find(({ url }) => isAllowedMediaUrl(url))?.url || "";
   }
 
+  /** @param {*} url @returns {string} */
   function normalizeImageIdentity(url) {
     try {
       const parsed = new URL(url, "https://www.facebook.com/");
@@ -881,6 +954,7 @@
     }
   }
 
+  /** @param {*} url @returns {string|null} */
   function extractPhotoId(url) {
     try {
       const parsed = new URL(url, "https://www.facebook.com/");
@@ -890,6 +964,7 @@
     }
   }
 
+  /** @param {*} url @returns {string|null} */
   function extractAlbumId(url) {
     try {
       const parsed = new URL(url, "https://www.facebook.com/");
@@ -901,6 +976,7 @@
     }
   }
 
+  /** @param {*} url @returns {string|null} */
   function extractSetId(url) {
     try {
       return new URL(url, "https://www.facebook.com/").searchParams.get("set") || null;
@@ -909,6 +985,7 @@
     }
   }
 
+  /** @param {*} url @returns {boolean} */
   function isPhotoViewerLocation(url) {
     try {
       const parsed = new URL(url);
@@ -918,6 +995,7 @@
     }
   }
 
+  /** @param {*} url @returns {boolean} */
   function isAllowedMediaUrl(url) {
     try {
       const parsed = new URL(url);
@@ -974,6 +1052,7 @@
     };
   }
 
+  /** @param {string} reason @param {number} foundCount @param {number|null} expectedCount @returns {boolean} */
   function isCollectionComplete(reason, foundCount, expectedCount) {
     if (reason === "expected") {
       return Boolean(expectedCount) && foundCount >= expectedCount;

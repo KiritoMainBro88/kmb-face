@@ -1,4 +1,4 @@
-(function initializeFacebookUtilities(globalScope) {
+(function initializeFacebookUtilities(/** @type {any} */ globalScope) {
   "use strict";
 
   const STORY_HOST_ID = "fbis-story-download-root";
@@ -6,15 +6,17 @@
   const BADGE_CLASS = "fbis-verified-badge";
   const HIDDEN_FEED_CLASS = "fbis-hidden-feed-item";
   const DiagnosticLogger = globalScope.FBISLogger;
+  const Constants = globalScope.FBISConstants ||
+    (typeof require === "function" ? require("./constants.js") : null);
   const I18n = globalScope.FBISI18n ||
     (typeof require === "function" ? require("./i18n.js") : null);
+  const { IPC_ACTIONS, MESSAGE_SOURCES, SELECTORS, STORAGE_KEYS, TIMINGS } = Constants;
   const t = (key, params) => I18n?.t?.(key, params) || key;
-  const LIKE_CONFIRM_WINDOW_MS = 3000;
   const DEFAULT_SETTINGS = Object.freeze({
-    fbis_enable_like_confirm: true,
-    fbis_enable_cosmetic_badge: true,
-    fbis_clean_feed: true,
-    fbis_language: I18n?.DEFAULT_LANGUAGE || "auto"
+    [STORAGE_KEYS.LIKE_CONFIRM]: true,
+    [STORAGE_KEYS.COSMETIC_BADGE]: true,
+    [STORAGE_KEYS.CLEAN_FEED]: true,
+    [STORAGE_KEYS.LANGUAGE]: I18n?.DEFAULT_LANGUAGE || "auto"
   });
   const featureSettings = { ...DEFAULT_SETTINGS };
   const pendingLikeControls = new WeakMap();
@@ -61,9 +63,9 @@
 
   function isLikeControl(element) {
     if (!element?.closest) return false;
-    const labelled = element.closest("[aria-label]");
+    const labelled = element.closest(SELECTORS.CONTROLS.LABELLED);
     if (!labelled) return false;
-    const clickable = labelled.closest('button, [role="button"]');
+    const clickable = labelled.closest(SELECTORS.CONTROLS.CLICKABLE);
     return Boolean(clickable && isLikeLabel(labelled.getAttribute("aria-label")));
   }
 
@@ -73,23 +75,27 @@
 
   function normalizeFeatureSettings(value = {}) {
     return {
-      fbis_enable_like_confirm: value.fbis_enable_like_confirm !== false,
-      fbis_enable_cosmetic_badge: value.fbis_enable_cosmetic_badge !== false,
-      fbis_clean_feed: value.fbis_clean_feed !== false,
-      fbis_language: I18n?.normalizeLanguagePreference?.(value.fbis_language) || "auto"
+      [STORAGE_KEYS.LIKE_CONFIRM]: value[STORAGE_KEYS.LIKE_CONFIRM] !== false,
+      [STORAGE_KEYS.COSMETIC_BADGE]: value[STORAGE_KEYS.COSMETIC_BADGE] !== false,
+      [STORAGE_KEYS.CLEAN_FEED]: value[STORAGE_KEYS.CLEAN_FEED] !== false,
+      [STORAGE_KEYS.LANGUAGE]:
+        I18n?.normalizeLanguagePreference?.(value[STORAGE_KEYS.LANGUAGE]) || "auto"
     };
   }
 
+  /** @param {Record<string, any>} [settings=featureSettings] @returns {boolean} */
   function isLikeConfirmationEnabled(settings = featureSettings) {
-    return settings?.fbis_enable_like_confirm !== false;
+    return settings?.[STORAGE_KEYS.LIKE_CONFIRM] !== false;
   }
 
+  /** @param {Record<string, any>} [settings=featureSettings] @returns {boolean} */
   function isCosmeticBadgeEnabled(settings = featureSettings) {
-    return settings?.fbis_enable_cosmetic_badge !== false;
+    return settings?.[STORAGE_KEYS.COSMETIC_BADGE] !== false;
   }
 
+  /** @param {Record<string, any>} [settings=featureSettings] @returns {boolean} */
   function isCleanFeedEnabled(settings = featureSettings) {
-    return settings?.fbis_clean_feed !== false;
+    return settings?.[STORAGE_KEYS.CLEAN_FEED] !== false;
   }
 
   function isSponsoredRedirectHref(value) {
@@ -115,7 +121,7 @@
     ) {
       return true;
     }
-    const links = article.querySelectorAll?.("a[href]") || [];
+    const links = article.querySelectorAll?.(SELECTORS.CONTROLS.LINK) || [];
     for (const link of links) {
       if (isSponsoredRedirectHref(link.getAttribute?.("href") || link.href)) return true;
     }
@@ -131,8 +137,8 @@
       return;
     }
 
-    for (const article of document.querySelectorAll('div[role="article"]')) {
-      if (article.parentElement?.closest?.('div[role="article"]')) continue;
+    for (const article of document.querySelectorAll(SELECTORS.POST.ARTICLE)) {
+      if (article.parentElement?.closest?.(SELECTORS.POST.ARTICLE)) continue;
       article.classList.toggle(HIDDEN_FEED_CLASS, isSponsoredOrSuggestedPost(article));
     }
   }
@@ -140,15 +146,25 @@
   function ensureMainWorldBridge() {
     if (!globalScope.document || !globalScope.chrome?.runtime?.getURL) return;
     if (document.getElementById("fbis-main-world-bridge")) return;
-    const script = document.createElement("script");
-    script.id = "fbis-main-world-bridge";
-    script.src = chrome.runtime.getURL("src/injected.js");
-    script.async = false;
-    script.addEventListener("load", () => script.remove(), { once: true });
-    (document.head || document.documentElement).appendChild(script);
+    if (document.getElementById("fbis-main-world-constants")) return;
+    const constantsScript = document.createElement("script");
+    constantsScript.id = "fbis-main-world-constants";
+    constantsScript.src = chrome.runtime.getURL("src/constants.js");
+    constantsScript.async = false;
+    constantsScript.addEventListener("load", () => {
+      constantsScript.remove();
+      if (document.getElementById("fbis-main-world-bridge")) return;
+      const script = document.createElement("script");
+      script.id = "fbis-main-world-bridge";
+      script.src = chrome.runtime.getURL("src/injected.js");
+      script.async = false;
+      script.addEventListener("load", () => script.remove(), { once: true });
+      (document.head || document.documentElement).appendChild(script);
+    }, { once: true });
+    (document.head || document.documentElement).appendChild(constantsScript);
   }
 
-  function requestMainBridge(type, payload = {}, timeout = 2500) {
+  function requestMainBridge(type, payload = {}, timeout = TIMINGS.BRIDGE_TIMEOUT_MS) {
     const requestId = `fbis-feature-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     return new Promise((resolve, reject) => {
       const timer = globalScope.setTimeout(() => {
@@ -160,7 +176,7 @@
         const message = event.data;
         if (
           event.source !== globalScope ||
-          message?.source !== "FBIS_MAIN" ||
+          message?.source !== MESSAGE_SOURCES.MAIN ||
           message.requestId !== requestId ||
           message.type !== `${type}_RESULT`
         ) {
@@ -173,7 +189,7 @@
       }
 
       globalScope.addEventListener("message", handleMessage);
-      globalScope.postMessage({ source: "FBIS_CONTENT", type, requestId, ...payload }, "*");
+      globalScope.postMessage({ source: MESSAGE_SOURCES.CONTENT, type, requestId, ...payload }, "*");
     });
   }
 
@@ -186,9 +202,9 @@
   }
 
   function findStoryPlaybackControl(predicate) {
-    const controls = document.querySelectorAll('[aria-label]');
+    const controls = document.querySelectorAll(SELECTORS.CONTROLS.LABELLED);
     for (const control of controls) {
-      if (!control.matches?.('button, [role="button"]')) continue;
+      if (!control.matches?.(SELECTORS.CONTROLS.CLICKABLE)) continue;
       if (predicate(control.getAttribute("aria-label"))) return control;
     }
     return null;
@@ -251,13 +267,17 @@
     setState?.("loading", t("toast_story_paused"));
     try {
       ensureMainWorldBridge();
-      const response = await requestMainBridge("FBIS_RESOLVE_STORY", { storyId }, 3000);
+      const response = await requestMainBridge(
+        IPC_ACTIONS.RESOLVE_STORY,
+        { storyId },
+        TIMINGS.STORY_BRIDGE_TIMEOUT_MS
+      );
       const story = response.story;
       if (!story?.url) throw new Error(t("story_not_found"));
 
       if (story.type === "video") {
         const result = await chrome.runtime.sendMessage({
-          type: "FBIS_DOWNLOAD_VIDEOS",
+          type: IPC_ACTIONS.DOWNLOAD_VIDEOS,
           postId: `story-${storyId || "current"}`,
           videos: [{ url: story.url }]
         });
@@ -266,7 +286,7 @@
         }
       } else {
         const result = await chrome.runtime.sendMessage({
-          type: "FBIS_DOWNLOAD_IMAGES",
+          type: IPC_ACTIONS.DOWNLOAD_IMAGES,
           albumId: `story-${storyId || "current"}`,
           images: [{ url: story.url }]
         });
@@ -318,7 +338,7 @@
             button.disabled = false;
             button.classList.remove("error");
             button.textContent = t("download_story");
-          }, 1800);
+          }, TIMINGS.UI_FEEDBACK_MS);
         }
       });
     });
@@ -329,16 +349,16 @@
 
   function findStoryContainer() {
     const candidates = [
-      ...document.querySelectorAll('[role="main"] [role="dialog"], [role="main"], main')
+      ...document.querySelectorAll(SELECTORS.VIEWER.STORY_CONTAINER)
     ];
     return candidates.find((node) => node.querySelector?.("video, img")) || candidates[0] || null;
   }
 
   function findLikeControl(target) {
     if (!target?.closest) return null;
-    const labelled = target.closest("[aria-label]");
+    const labelled = target.closest(SELECTORS.CONTROLS.LABELLED);
     if (!labelled || !isLikeLabel(labelled.getAttribute("aria-label"))) return null;
-    return labelled.closest('button, [role="button"]');
+    return labelled.closest(SELECTORS.CONTROLS.CLICKABLE);
   }
 
   function removeLikePopover() {
@@ -397,15 +417,11 @@
     if (pending) clearLikeConfirmation(control);
     event.preventDefault();
     event.stopImmediatePropagation();
-    showLikeConfirmation(control, Date.now() + LIKE_CONFIRM_WINDOW_MS);
+    showLikeConfirmation(control, Date.now() + TIMINGS.LIKE_CONFIRM_WINDOW_MS);
   }
 
   function findCurrentUserName() {
-    const selectors = [
-      'nav a[aria-label][href*="/profile.php"]',
-      'nav a[aria-label][href*="/me/"]',
-      'header a[aria-label][href*="/profile.php"]'
-    ];
+    const selectors = SELECTORS.PROFILE.CURRENT_USER_CANDIDATES;
     for (const selector of selectors) {
       const node = document.querySelector(selector);
       const name = normalizeName(node?.getAttribute?.("aria-label"));
@@ -414,7 +430,7 @@
       }
     }
 
-    const navLinks = Array.from(document.querySelectorAll('nav a[aria-label][href]'));
+    const navLinks = Array.from(document.querySelectorAll(SELECTORS.PROFILE.NAV_LINKS));
     for (const link of navLinks) {
       const name = normalizeName(link.getAttribute("aria-label"));
       let parsed;
@@ -464,7 +480,7 @@
     }
     if (!currentUserName) currentUserName = findCurrentUserName();
     if (!currentUserName) return;
-    const candidates = document.querySelectorAll('h1,h2,h3,h4,strong,a[role="link"],span[dir="auto"]');
+    const candidates = document.querySelectorAll(SELECTORS.PROFILE.BADGE_NAME_CANDIDATES);
     for (const node of candidates) {
       if (node.closest(`#${STORY_HOST_ID}, #${LIKE_POPOVER_ID}`)) continue;
       if (normalizeName(node.textContent) !== currentUserName) continue;
@@ -482,10 +498,10 @@
     try {
       const stored = await chrome.storage.local.get(DEFAULT_SETTINGS);
       Object.assign(featureSettings, normalizeFeatureSettings(stored));
-      I18n?.setPreference?.(featureSettings.fbis_language);
+      I18n?.setPreference?.(featureSettings[STORAGE_KEYS.LANGUAGE]);
     } catch {
       Object.assign(featureSettings, DEFAULT_SETTINGS);
-      I18n?.setPreference?.(DEFAULT_SETTINGS.fbis_language);
+      I18n?.setPreference?.(DEFAULT_SETTINGS[STORAGE_KEYS.LANGUAGE]);
     }
   }
 
@@ -493,30 +509,31 @@
     if (areaName !== "local") return;
     let shouldRescanBadges = false;
 
-    if (changes.fbis_enable_like_confirm) {
-      featureSettings.fbis_enable_like_confirm =
-        changes.fbis_enable_like_confirm.newValue !== false;
-      if (!featureSettings.fbis_enable_like_confirm) clearLikeConfirmation();
+    if (changes[STORAGE_KEYS.LIKE_CONFIRM]) {
+      featureSettings[STORAGE_KEYS.LIKE_CONFIRM] =
+        changes[STORAGE_KEYS.LIKE_CONFIRM].newValue !== false;
+      if (!featureSettings[STORAGE_KEYS.LIKE_CONFIRM]) clearLikeConfirmation();
     }
-    if (changes.fbis_enable_cosmetic_badge) {
-      featureSettings.fbis_enable_cosmetic_badge =
-        changes.fbis_enable_cosmetic_badge.newValue !== false;
+    if (changes[STORAGE_KEYS.COSMETIC_BADGE]) {
+      featureSettings[STORAGE_KEYS.COSMETIC_BADGE] =
+        changes[STORAGE_KEYS.COSMETIC_BADGE].newValue !== false;
       shouldRescanBadges = true;
     }
-    if (changes.fbis_clean_feed) {
-      featureSettings.fbis_clean_feed = changes.fbis_clean_feed.newValue !== false;
+    if (changes[STORAGE_KEYS.CLEAN_FEED]) {
+      featureSettings[STORAGE_KEYS.CLEAN_FEED] =
+        changes[STORAGE_KEYS.CLEAN_FEED].newValue !== false;
       applyCleanFeed();
     }
-    if (changes.fbis_language) {
-      featureSettings.fbis_language = I18n?.normalizeLanguagePreference?.(
-        changes.fbis_language.newValue
+    if (changes[STORAGE_KEYS.LANGUAGE]) {
+      featureSettings[STORAGE_KEYS.LANGUAGE] = I18n?.normalizeLanguagePreference?.(
+        changes[STORAGE_KEYS.LANGUAGE].newValue
       ) || "auto";
-      I18n?.setPreference?.(featureSettings.fbis_language);
+      I18n?.setPreference?.(featureSettings[STORAGE_KEYS.LANGUAGE]);
       refreshLocalizedFeatureUi();
     }
 
     if (shouldRescanBadges) {
-      if (!featureSettings.fbis_enable_cosmetic_badge) removeCosmeticBadges();
+      if (!featureSettings[STORAGE_KEYS.COSMETIC_BADGE]) removeCosmeticBadges();
       else {
         currentUserName = "";
         scheduleUtilityScan();
@@ -536,7 +553,7 @@
       }
       applyCosmeticBadges();
       applyCleanFeed();
-    }, 180);
+    }, TIMINGS.FEATURE_SCAN_DEBOUNCE_MS);
   }
 
   function refreshLocalizedFeatureUi() {
@@ -565,7 +582,7 @@
     });
     globalScope.setInterval(() => {
       if (location.href !== lastKnownUrl) scheduleUtilityScan();
-    }, 750);
+    }, TIMINGS.FEATURE_LOCATION_POLL_MS);
   }
 
   const api = {

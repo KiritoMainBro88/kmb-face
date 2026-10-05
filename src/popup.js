@@ -1,18 +1,21 @@
-(function initializePopup(globalScope) {
+(function initializePopup(/** @type {any} */ globalScope) {
   "use strict";
 
   const Naming = globalScope.FBISNaming ||
     (typeof require === "function" ? require("./naming.js") : null);
   const I18n = globalScope.FBISI18n ||
     (typeof require === "function" ? require("./i18n.js") : null);
+  const Constants = globalScope.FBISConstants ||
+    (typeof require === "function" ? require("./constants.js") : null);
+  const { IPC_ACTIONS, STORAGE_KEYS } = Constants;
   const DEFAULT_SETTINGS = Object.freeze({
-    fbis_enable_like_confirm: true,
-    fbis_enable_cosmetic_badge: true,
-    fbis_include_post_info: true,
-    fbis_default_download_mode: "zip",
-    fbis_clean_feed: true,
-    fbis_filename_template: Naming?.DEFAULT_FILENAME_TEMPLATE || "{author}_{postId}_{index}",
-    fbis_language: I18n?.DEFAULT_LANGUAGE || "auto"
+    [STORAGE_KEYS.LIKE_CONFIRM]: true,
+    [STORAGE_KEYS.COSMETIC_BADGE]: true,
+    [STORAGE_KEYS.INCLUDE_POST_INFO]: true,
+    [STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE]: "zip",
+    [STORAGE_KEYS.CLEAN_FEED]: true,
+    [STORAGE_KEYS.FILENAME_TEMPLATE]: Naming?.DEFAULT_FILENAME_TEMPLATE || "{author}_{postId}_{index}",
+    [STORAGE_KEYS.LANGUAGE]: I18n?.DEFAULT_LANGUAGE || "auto"
   });
   const ISSUE_NEW_URL = "https://github.com/KiritoMainBro88/kmb-face/issues/new";
 
@@ -43,18 +46,22 @@
 
   function normalizeSettings(value = {}) {
     return {
-      fbis_enable_like_confirm: value.fbis_enable_like_confirm !== false,
-      fbis_enable_cosmetic_badge: value.fbis_enable_cosmetic_badge !== false,
-      fbis_include_post_info: value.fbis_include_post_info !== false,
-      fbis_default_download_mode:
-        value.fbis_default_download_mode === "manager" ? "manager" : "zip",
-      fbis_clean_feed: value.fbis_clean_feed !== false,
-      fbis_filename_template: Naming?.normalizeFilenameTemplate
-        ? Naming.normalizeFilenameTemplate(value.fbis_filename_template)
-        : String(value.fbis_filename_template || DEFAULT_SETTINGS.fbis_filename_template).trim(),
-      fbis_language: I18n?.normalizeLanguagePreference
-        ? I18n.normalizeLanguagePreference(value.fbis_language)
-        : ["auto", "vi", "en"].includes(value.fbis_language) ? value.fbis_language : "auto"
+      [STORAGE_KEYS.LIKE_CONFIRM]: value[STORAGE_KEYS.LIKE_CONFIRM] !== false,
+      [STORAGE_KEYS.COSMETIC_BADGE]: value[STORAGE_KEYS.COSMETIC_BADGE] !== false,
+      [STORAGE_KEYS.INCLUDE_POST_INFO]: value[STORAGE_KEYS.INCLUDE_POST_INFO] !== false,
+      [STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE]:
+        value[STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE] === "manager" ? "manager" : "zip",
+      [STORAGE_KEYS.CLEAN_FEED]: value[STORAGE_KEYS.CLEAN_FEED] !== false,
+      [STORAGE_KEYS.FILENAME_TEMPLATE]: Naming?.normalizeFilenameTemplate
+        ? Naming.normalizeFilenameTemplate(value[STORAGE_KEYS.FILENAME_TEMPLATE])
+        : String(
+          value[STORAGE_KEYS.FILENAME_TEMPLATE] || DEFAULT_SETTINGS[STORAGE_KEYS.FILENAME_TEMPLATE]
+        ).trim(),
+      [STORAGE_KEYS.LANGUAGE]: I18n?.normalizeLanguagePreference
+        ? I18n.normalizeLanguagePreference(value[STORAGE_KEYS.LANGUAGE])
+        : ["auto", "vi", "en"].includes(value[STORAGE_KEYS.LANGUAGE])
+          ? value[STORAGE_KEYS.LANGUAGE]
+          : "auto"
     };
   }
 
@@ -70,7 +77,7 @@
   async function initializeBrowserPopup() {
     if (!globalScope.document || !globalScope.chrome?.storage?.local) return;
 
-    const controls = {
+    const controls = /** @type {any} */ ({
       likeConfirm: document.getElementById("like-confirm"),
       cosmeticBadge: document.getElementById("cosmetic-badge"),
       postInfo: document.getElementById("post-info"),
@@ -84,43 +91,54 @@
       updateBanner: document.getElementById("update-banner"),
       updateCopy: document.getElementById("update-copy"),
       updateDownload: document.getElementById("update-download")
-    };
+    });
 
     const stored = await chrome.storage.local.get({
       ...DEFAULT_SETTINGS,
-      hasUpdate: false,
-      latestVersion: "",
-      releaseUrl: ""
+      [STORAGE_KEYS.HAS_UPDATE]: false,
+      [STORAGE_KEYS.LATEST_VERSION]: "",
+      [STORAGE_KEYS.RELEASE_URL]: ""
     });
     const settings = normalizeSettings(stored);
-    I18n?.setPreference?.(settings.fbis_language);
-    controls.likeConfirm.checked = settings.fbis_enable_like_confirm;
-    controls.cosmeticBadge.checked = settings.fbis_enable_cosmetic_badge;
-    controls.postInfo.checked = settings.fbis_include_post_info;
-    controls.cleanFeed.checked = settings.fbis_clean_feed;
-    controls.language.value = settings.fbis_language;
-    controls.filenameTemplate.value = settings.fbis_filename_template;
-    controls.modes.find((input) => input.value === settings.fbis_default_download_mode).checked = true;
+    I18n?.setPreference?.(settings[STORAGE_KEYS.LANGUAGE]);
+    controls.likeConfirm.checked = settings[STORAGE_KEYS.LIKE_CONFIRM];
+    controls.cosmeticBadge.checked = settings[STORAGE_KEYS.COSMETIC_BADGE];
+    controls.postInfo.checked = settings[STORAGE_KEYS.INCLUDE_POST_INFO];
+    controls.cleanFeed.checked = settings[STORAGE_KEYS.CLEAN_FEED];
+    controls.language.value = settings[STORAGE_KEYS.LANGUAGE];
+    controls.filenameTemplate.value = settings[STORAGE_KEYS.FILENAME_TEMPLATE];
+    controls.modes.find((input) => input.value === settings[STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE]).checked = true;
 
     const renderLocalizedText = () => {
       if (!I18n?.t) return;
       document.documentElement.lang = I18n.getLanguage();
-      for (const node of document.querySelectorAll("[data-i18n]")) {
+      for (const rawNode of document.querySelectorAll("[data-i18n]")) {
+        const node = /** @type {HTMLElement} */ (rawNode);
         const params = node.dataset.i18n === "popup_subtitle"
           ? { version: chrome.runtime.getManifest().version }
           : {};
         node.textContent = I18n.t(node.dataset.i18n, params);
       }
-      if (stored.hasUpdate && stored.latestVersion && isSafeReleaseUrl(stored.releaseUrl)) {
-        controls.updateCopy.textContent = I18n.t("banner_update_label", { version: stored.latestVersion });
+      if (
+        stored[STORAGE_KEYS.HAS_UPDATE] &&
+        stored[STORAGE_KEYS.LATEST_VERSION] &&
+        isSafeReleaseUrl(stored[STORAGE_KEYS.RELEASE_URL])
+      ) {
+        controls.updateCopy.textContent = I18n.t("banner_update_label", {
+          version: stored[STORAGE_KEYS.LATEST_VERSION]
+        });
       }
     };
     renderLocalizedText();
 
-    if (stored.hasUpdate && stored.latestVersion && isSafeReleaseUrl(stored.releaseUrl)) {
+    if (
+      stored[STORAGE_KEYS.HAS_UPDATE] &&
+      stored[STORAGE_KEYS.LATEST_VERSION] &&
+      isSafeReleaseUrl(stored[STORAGE_KEYS.RELEASE_URL])
+    ) {
       controls.updateBanner.hidden = false;
       controls.updateDownload.addEventListener("click", () => {
-        void chrome.tabs.create({ url: stored.releaseUrl });
+        void chrome.tabs.create({ url: stored[STORAGE_KEYS.RELEASE_URL] });
       });
     }
 
@@ -135,10 +153,10 @@
 
     const saveBooleans = async () => {
       await chrome.storage.local.set({
-        fbis_enable_like_confirm: controls.likeConfirm.checked,
-        fbis_enable_cosmetic_badge: controls.cosmeticBadge.checked,
-        fbis_include_post_info: controls.postInfo.checked,
-        fbis_clean_feed: controls.cleanFeed.checked
+        [STORAGE_KEYS.LIKE_CONFIRM]: controls.likeConfirm.checked,
+        [STORAGE_KEYS.COSMETIC_BADGE]: controls.cosmeticBadge.checked,
+        [STORAGE_KEYS.INCLUDE_POST_INFO]: controls.postInfo.checked,
+        [STORAGE_KEYS.CLEAN_FEED]: controls.cleanFeed.checked
       });
       globalScope.FBISLogger?.info("popup", "SETTINGS_UPDATED");
       showStatus();
@@ -154,7 +172,7 @@
     }
     controls.language.addEventListener("change", async () => {
       const language = I18n?.normalizeLanguagePreference?.(controls.language.value) || controls.language.value;
-      await chrome.storage.local.set({ fbis_language: language });
+      await chrome.storage.local.set({ [STORAGE_KEYS.LANGUAGE]: language });
       I18n?.setPreference?.(language);
       renderLocalizedText();
       globalScope.FBISLogger?.info("popup", `LANGUAGE_${String(language).toUpperCase()}`);
@@ -163,16 +181,16 @@
     controls.filenameTemplate.addEventListener("change", async () => {
       const normalized = Naming?.normalizeFilenameTemplate
         ? Naming.normalizeFilenameTemplate(controls.filenameTemplate.value)
-        : controls.filenameTemplate.value.trim() || DEFAULT_SETTINGS.fbis_filename_template;
+        : controls.filenameTemplate.value.trim() || DEFAULT_SETTINGS[STORAGE_KEYS.FILENAME_TEMPLATE];
       controls.filenameTemplate.value = normalized;
-      await chrome.storage.local.set({ fbis_filename_template: normalized });
+      await chrome.storage.local.set({ [STORAGE_KEYS.FILENAME_TEMPLATE]: normalized });
       globalScope.FBISLogger?.info("popup", "FILENAME_TEMPLATE_UPDATED");
       showStatus();
     });
     for (const input of controls.modes) {
       input.addEventListener("change", async () => {
         if (!input.checked) return;
-        await chrome.storage.local.set({ fbis_default_download_mode: input.value });
+        await chrome.storage.local.set({ [STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE]: input.value });
         globalScope.FBISLogger?.info("popup", `DOWNLOAD_MODE_${input.value.toUpperCase()}`);
         showStatus();
       });
@@ -181,7 +199,7 @@
     async function collectDiagnostics() {
       let logs = [];
       try {
-        const response = await chrome.runtime.sendMessage({ type: "FBIS_GET_DIAGNOSTIC_LOGS" });
+        const response = await chrome.runtime.sendMessage({ type: IPC_ACTIONS.GET_DIAGNOSTIC_LOGS });
         logs = Array.isArray(response?.entries) ? response.entries : [];
       } catch (error) {
         globalScope.FBISLogger?.warn("popup", `LOG_FETCH_FAILED ${error instanceof Error ? error.message : "unknown"}`);

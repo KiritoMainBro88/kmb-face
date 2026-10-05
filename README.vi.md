@@ -3,7 +3,7 @@
 Language: [ English ](README.md) | **[ Tiếng Việt ]**
 
 [![License GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-v1.2.0-0a7cff.svg)
+![Version](https://img.shields.io/badge/version-v1.3.0-0a7cff.svg)
 ![Node tests](https://img.shields.io/github/actions/workflow/status/KiritoMainBro88/kmb-face/ci.yml?branch=main&label=Node%20tests)
 ![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-34A853.svg)
 
@@ -29,6 +29,8 @@ Sau khi thay file bằng phiên bản mới, bấm **Reload** trong `chrome://ex
 - **Custom Filename Template**: hỗ trợ `{author}`, `{postId}`, `{index}`, `{date}` cho media tải trực tiếp và file media trong ZIP.
 - **Giao diện song ngữ**: chọn **Tự động / Auto**, **Tiếng Việt** hoặc **English**. Auto dùng `navigator.language`; locale `vi-*` chọn tiếng Việt, các locale khác mặc định English.
 - **Auto-Update Checker**: kiểm tra GitHub Releases mỗi 12 giờ; khi có semantic version mới hơn sẽ hiện badge `NEW` và banner cập nhật trong popup.
+- **Kiến trúc sạch v1.3**: tập trung timing, limit, IPC action, storage key và selector Facebook; UI quick action được tách riêng sau `UIManager`.
+- **Zero-Build Type Safety**: JavaScript vẫn được Chrome chạy trực tiếp, đồng thời JSDoc + TypeScript `checkJs` kiểm tra kiểu tĩnh trong CI.
 - **Like Confirmation**: yêu cầu bấm lần thứ hai trong vòng 3 giây trước khi thao tác Like được thực hiện, giúp hạn chế bấm nhầm.
 - **Cosmetic Verified Badge**: tích xanh trang trí client-side cho người dùng hiện tại; không thay đổi trạng thái xác minh tài khoản Facebook.
 - **Diagnostic Reporter**: giữ tối đa 50 sự kiện chẩn đoán gần nhất và loại bỏ các trường credential/session phổ biến trước khi Copy Logs hoặc mở GitHub Issue.

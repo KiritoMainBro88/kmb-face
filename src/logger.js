@@ -1,10 +1,18 @@
-(function initializeDiagnosticLogger(globalScope) {
+(function initializeDiagnosticLogger(/** @type {any} */ globalScope) {
   "use strict";
 
-  const MAX_EVENTS = 50;
+  const Constants = globalScope.FBISConstants ||
+    (typeof require === "function" ? require("./constants.js") : null);
+  const { IPC_ACTIONS, LIMITS } = Constants;
+  const MAX_EVENTS = LIMITS.MAX_LOG_EVENTS;
   const LEVELS = new Set(["INFO", "WARN", "ERROR"]);
   const events = [];
 
+  /**
+   * Remove credentials and session identifiers from diagnostic text.
+   * @param {*} value
+   * @returns {string}
+   */
   function sanitizeText(value) {
     let text = String(value ?? "");
     const sensitiveKey = "(?:fb_dtsg|c_user|session(?:[_-]?id)?)";
@@ -28,9 +36,9 @@
       time: /^\d{4}-\d{2}-\d{2}T/.test(String(event.time || ""))
         ? String(event.time)
         : new Date().toISOString(),
-      module: sanitizeText(event.module || "core").slice(0, 48),
+      module: sanitizeText(event.module || "core").slice(0, LIMITS.MAX_DIAGNOSTIC_MODULE_LENGTH),
       level: LEVELS.has(level) ? level : "INFO",
-      code: sanitizeText(event.code || "EVENT").slice(0, 500)
+      code: sanitizeText(event.code || "EVENT").slice(0, LIMITS.MAX_DIAGNOSTIC_CODE_LENGTH)
     };
   }
 
@@ -43,7 +51,7 @@
   function forwardToBackground(entry) {
     if (!globalScope.document || !globalScope.chrome?.runtime?.sendMessage) return;
     try {
-      const pending = chrome.runtime.sendMessage({ type: "FBIS_LOG_EVENT", entry });
+      const pending = chrome.runtime.sendMessage({ type: IPC_ACTIONS.LOG_EVENT, entry });
       pending?.catch?.(() => undefined);
     } catch {
       // Diagnostics must never interfere with extension behavior.
@@ -56,18 +64,30 @@
     return entry;
   }
 
+  /**
+   * Add an entry received from another extension context.
+   * @param {Object} entry
+   * @returns {Object}
+   */
   function receive(entry) {
     return pushEvent(entry);
   }
 
+  /** @returns {Object[]} */
   function getEntries() {
     return events.map((entry) => ({ ...entry }));
   }
 
+  /** @returns {void} */
   function clear() {
     events.length = 0;
   }
 
+  /**
+   * Format diagnostic entries as plain text.
+   * @param {Object[]} [entries=getEntries()]
+   * @returns {string}
+   */
   function formatEntries(entries = getEntries()) {
     if (!Array.isArray(entries) || entries.length === 0) return "(no diagnostic events)";
     return entries
@@ -79,16 +99,31 @@
       .join("\n");
   }
 
+  /** @param {string} module @param {string} code @returns {Object} */
+  function info(module, code) {
+    return record(module, "INFO", code);
+  }
+
+  /** @param {string} module @param {string} code @returns {Object} */
+  function warn(module, code) {
+    return record(module, "WARN", code);
+  }
+
+  /** @param {string} module @param {string} code @returns {Object} */
+  function error(module, code) {
+    return record(module, "ERROR", code);
+  }
+
   const api = Object.freeze({
     MAX_EVENTS,
     clear,
-    error: (module, code) => record(module, "ERROR", code),
+    error,
     formatEntries,
     getEntries,
-    info: (module, code) => record(module, "INFO", code),
+    info,
     receive,
     sanitizeText,
-    warn: (module, code) => record(module, "WARN", code)
+    warn
   });
 
   globalScope.FBISLogger = api;

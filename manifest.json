@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Facebook Post Image Saver",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Download Facebook photos, HD videos, Reels and Stories with ZIP, IDM/FDM, Clean Feed and bilingual UI support.",
   "permissions": [
     "downloads",
@@ -26,13 +26,13 @@
     {
       "matches": ["https://*.facebook.com/*"],
       "css": ["src/content.css"],
-      "js": ["src/logger.js", "src/naming.js", "src/i18n.js", "lib/fflate.min.js", "src/collector.js", "src/content.js", "src/features.js"],
+      "js": ["src/constants.js", "src/logger.js", "src/naming.js", "src/i18n.js", "src/ui.js", "lib/fflate.min.js", "src/collector.js", "src/content.js", "src/features.js"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/injected.js"],
+      "resources": ["src/constants.js", "src/injected.js"],
       "matches": ["https://*.facebook.com/*"]
     }
   ]

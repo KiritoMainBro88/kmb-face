@@ -3,7 +3,7 @@
 Language: **[ English ]** | [ Tiếng Việt ](README.vi.md)
 
 [![License GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-v1.2.0-0a7cff.svg)
+![Version](https://img.shields.io/badge/version-v1.3.0-0a7cff.svg)
 ![Node tests](https://img.shields.io/github/actions/workflow/status/KiritoMainBro88/kmb-face/ci.yml?branch=main&label=Node%20tests)
 ![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-34A853.svg)
 
@@ -29,6 +29,8 @@ After replacing files with a newer version, click **Reload** in `chrome://extens
 - **Custom Filename Template**: supports `{author}`, `{postId}`, `{index}`, and `{date}` for direct downloads and media stored inside ZIP files.
 - **Bilingual UI**: choose **Auto**, **Tiếng Việt**, or **English**. Auto mode uses `navigator.language`, selecting Vietnamese for `vi-*` locales and English otherwise.
 - **Auto-Update Checker**: polls the latest GitHub Release every 12 hours and displays a `NEW` badge plus an update banner when a newer semantic version exists.
+- **Clean Architecture v1.3**: centralizes browser timings, limits, IPC actions, storage keys, and Facebook selectors; floating action UI is isolated behind `UIManager`.
+- **Zero-Build Type Safety**: plain JavaScript remains directly loadable by Chrome while JSDoc + TypeScript `checkJs` provide static checking in CI.
 - **Like Confirmation**: requires a second click within three seconds before a Like action proceeds, reducing accidental reactions.
 - **Cosmetic Verified Badge**: adds a local client-side visual badge for the current user. It does not alter Facebook account verification.
 - **Diagnostic Reporter**: stores the latest 50 sanitized diagnostic events and strips common Facebook/session credentials before Copy Logs or GitHub issue generation.

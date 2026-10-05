@@ -16,16 +16,28 @@
   const Naming = globalThis.FBISNaming;
   const I18n = globalThis.FBISI18n;
   const DiagnosticLogger = globalThis.FBISLogger;
-  if (!Zip?.Zip || !Zip?.ZipPassThrough || !Zip?.strToU8 || !Naming?.parseFilenameTemplate || !I18n?.t) {
+  const Constants = globalThis.FBISConstants;
+  const UI = globalThis.FBISUI;
+  if (
+    !Zip?.Zip ||
+    !Zip?.ZipPassThrough ||
+    !Zip?.strToU8 ||
+    !Naming?.parseFilenameTemplate ||
+    !I18n?.t ||
+    !Constants ||
+    !UI?.UIManager
+  ) {
     throw new Error("Required extension modules were not loaded.");
   }
+  const { IPC_ACTIONS, LIMITS, MESSAGE_SOURCES, SELECTORS, STORAGE_KEYS, TIMINGS } = Constants;
   const t = (key, params) => I18n.t(key, params);
+  const uiManager = new UI.UIManager();
 
   const DEFAULT_SETTINGS = Object.freeze({
-    fbis_include_post_info: true,
-    fbis_default_download_mode: "zip",
-    fbis_filename_template: Naming.DEFAULT_FILENAME_TEMPLATE,
-    fbis_language: I18n.DEFAULT_LANGUAGE
+    [STORAGE_KEYS.INCLUDE_POST_INFO]: true,
+    [STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE]: "zip",
+    [STORAGE_KEYS.FILENAME_TEMPLATE]: Naming.DEFAULT_FILENAME_TEMPLATE,
+    [STORAGE_KEYS.LANGUAGE]: I18n.DEFAULT_LANGUAGE
   });
   const contentSettings = { ...DEFAULT_SETTINGS };
   const quickActionViews = new Set();
@@ -54,12 +66,20 @@
   const shadow = host.attachShadow({ mode: "closed" });
   const collector = new Collector.CarouselCollector();
   class SilentFastCollector extends Collector.CarouselCollector {
+    /** @param {Object} [options={}] */
+    constructor(options = {}) {
+      super(options);
+    }
+
     async waitForReadyViewerState(previous, timeout, isCancelled) {
       if (!previous) {
         return super.waitForReadyViewerState(previous, timeout, isCancelled);
       }
 
-      const maxWait = Math.min(Number(timeout) || 800, 800);
+      const maxWait = Math.min(
+        Number(timeout) || TIMINGS.IMAGE_STABLE_TIMEOUT_MS,
+        TIMINGS.IMAGE_STABLE_TIMEOUT_MS
+      );
       const deadline = Date.now() + maxWait;
       while (Date.now() < deadline) {
         if (isCancelled?.()) return null;
@@ -75,7 +95,7 @@
             return state;
           }
         }
-        await new Promise((resolve) => this.window.setTimeout(resolve, 20));
+        await new Promise((resolve) => this.window.setTimeout(resolve, TIMINGS.POLL_INTERVAL_MS));
       }
       return null;
     }
@@ -85,16 +105,16 @@
       if (!Collector.dispatchNextKeyboardEvent(this.document, this.window)) {
         return super.advanceViewer(current, isCancelled);
       }
-      return this.waitForReadyViewerState(current, 800, isCancelled);
+      return this.waitForReadyViewerState(current, TIMINGS.IMAGE_STABLE_TIMEOUT_MS, isCancelled);
     }
   }
   const fastCollector = new SilentFastCollector({
-    pollInterval: 20,
-    openTimeout: 2500,
-    changeTimeout: 800,
-    keyboardRetryTimeout: 800,
+    pollInterval: TIMINGS.POLL_INTERVAL_MS,
+    openTimeout: TIMINGS.BRIDGE_TIMEOUT_MS,
+    changeTimeout: TIMINGS.IMAGE_STABLE_TIMEOUT_MS,
+    keyboardRetryTimeout: TIMINGS.IMAGE_STABLE_TIMEOUT_MS,
     keyboardRetryLimit: 1,
-    safetyLimit: 500
+    safetyLimit: LIMITS.MAX_SAFETY_IMAGES
   });
   document.documentElement.appendChild(host);
 
@@ -180,7 +200,7 @@
     <button class="picker-toast is-hidden" data-slot="picker-toast" type="button" data-action="cancel-pick" data-i18n="picker_prompt"></button>
   `;
 
-  const elements = {
+  const elements = /** @type {any} */ ({
     panel: shadow.querySelector(".panel"),
     pickerToast: shadow.querySelector('[data-slot="picker-toast"]'),
     selectionCard: shadow.querySelector('[data-slot="selection-card"]'),
@@ -197,17 +217,17 @@
     selectedCount: shadow.querySelector('[data-slot="selected-count"]'),
     gallery: shadow.querySelector('[data-slot="gallery"]'),
     downloadSelectedButton: shadow.querySelector('[data-action="download-selected"]')
-  };
+  });
   refreshLocalizedUi();
 
   shadow.addEventListener("click", handlePanelClick);
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type === "FBIS_TOGGLE_PANEL") {
+    if (message?.type === IPC_ACTIONS.TOGGLE_PANEL) {
       togglePanel();
       sendResponse({ ok: true });
       return false;
     }
-    if (message?.type === "FBIS_DOWNLOAD_PROGRESS") {
+    if (message?.type === IPC_ACTIONS.DOWNLOAD_PROGRESS) {
       updateDownloadProgress(message);
     }
     return false;
@@ -218,11 +238,13 @@
 
   function normalizeContentSettings(value = {}) {
     return {
-      fbis_include_post_info: value.fbis_include_post_info !== false,
-      fbis_default_download_mode:
-        value.fbis_default_download_mode === "manager" ? "manager" : "zip",
-      fbis_filename_template: Naming.normalizeFilenameTemplate(value.fbis_filename_template),
-      fbis_language: I18n.normalizeLanguagePreference(value.fbis_language)
+      [STORAGE_KEYS.INCLUDE_POST_INFO]: value[STORAGE_KEYS.INCLUDE_POST_INFO] !== false,
+      [STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE]:
+        value[STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE] === "manager" ? "manager" : "zip",
+      [STORAGE_KEYS.FILENAME_TEMPLATE]: Naming.normalizeFilenameTemplate(
+        value[STORAGE_KEYS.FILENAME_TEMPLATE]
+      ),
+      [STORAGE_KEYS.LANGUAGE]: I18n.normalizeLanguagePreference(value[STORAGE_KEYS.LANGUAGE])
     };
   }
 
@@ -231,10 +253,10 @@
     try {
       const stored = await chrome.storage.local.get(DEFAULT_SETTINGS);
       Object.assign(contentSettings, normalizeContentSettings(stored));
-      I18n.setPreference(contentSettings.fbis_language);
+      I18n.setPreference(contentSettings[STORAGE_KEYS.LANGUAGE]);
     } catch {
       Object.assign(contentSettings, DEFAULT_SETTINGS);
-      I18n.setPreference(DEFAULT_SETTINGS.fbis_language);
+      I18n.setPreference(DEFAULT_SETTINGS[STORAGE_KEYS.LANGUAGE]);
     }
     refreshLocalizedUi();
     chrome.storage?.onChanged?.addListener(handleContentSettingsChanged);
@@ -242,31 +264,36 @@
 
   function handleContentSettingsChanged(changes, areaName) {
     if (areaName !== "local") return;
-    if (changes.fbis_include_post_info) {
-      contentSettings.fbis_include_post_info = changes.fbis_include_post_info.newValue !== false;
+    if (changes[STORAGE_KEYS.INCLUDE_POST_INFO]) {
+      contentSettings[STORAGE_KEYS.INCLUDE_POST_INFO] =
+        changes[STORAGE_KEYS.INCLUDE_POST_INFO].newValue !== false;
     }
-    if (changes.fbis_default_download_mode) {
-      contentSettings.fbis_default_download_mode =
-        changes.fbis_default_download_mode.newValue === "manager" ? "manager" : "zip";
+    if (changes[STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE]) {
+      contentSettings[STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE] =
+        changes[STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE].newValue === "manager" ? "manager" : "zip";
       refreshQuickActionLabels();
     }
-    if (changes.fbis_filename_template) {
-      contentSettings.fbis_filename_template = Naming.normalizeFilenameTemplate(
-        changes.fbis_filename_template.newValue
+    if (changes[STORAGE_KEYS.FILENAME_TEMPLATE]) {
+      contentSettings[STORAGE_KEYS.FILENAME_TEMPLATE] = Naming.normalizeFilenameTemplate(
+        changes[STORAGE_KEYS.FILENAME_TEMPLATE].newValue
       );
     }
-    if (changes.fbis_language) {
-      contentSettings.fbis_language = I18n.normalizeLanguagePreference(changes.fbis_language.newValue);
-      I18n.setPreference(contentSettings.fbis_language);
+    if (changes[STORAGE_KEYS.LANGUAGE]) {
+      contentSettings[STORAGE_KEYS.LANGUAGE] = I18n.normalizeLanguagePreference(
+        changes[STORAGE_KEYS.LANGUAGE].newValue
+      );
+      I18n.setPreference(contentSettings[STORAGE_KEYS.LANGUAGE]);
       refreshLocalizedUi();
     }
   }
 
   function refreshLocalizedUi() {
-    for (const node of shadow.querySelectorAll("[data-i18n]")) {
+    for (const rawNode of shadow.querySelectorAll("[data-i18n]")) {
+      const node = /** @type {HTMLElement} */ (rawNode);
       node.textContent = t(node.dataset.i18n);
     }
-    for (const node of shadow.querySelectorAll("[data-i18n-aria]")) {
+    for (const rawNode of shadow.querySelectorAll("[data-i18n-aria]")) {
+      const node = /** @type {HTMLElement} */ (rawNode);
       node.setAttribute("aria-label", t(node.dataset.i18nAria));
     }
     if (elements.useOpenButton?.dataset.context === "viewer") {
@@ -279,12 +306,12 @@
   }
 
   function getDefaultQuickActionMode(pureVideo) {
-    return pureVideo ? "video" : contentSettings.fbis_default_download_mode;
+    return pureVideo ? "video" : contentSettings[STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE];
   }
 
   function getQuickActionLabel({ pureVideo, estimatedImages, estimatedVideos }) {
     if (pureVideo) return t("quick_download_video");
-    if (contentSettings.fbis_default_download_mode === "manager") {
+    if (contentSettings[STORAGE_KEYS.DEFAULT_DOWNLOAD_MODE] === "manager") {
       const total = estimatedImages + estimatedVideos;
       return t("quick_download_manager", { count: total });
     }
@@ -295,36 +322,52 @@
   }
 
   function refreshQuickActionLabels() {
+    cleanupDetachedQuickActions();
     for (const view of quickActionViews) {
-      if (!view.host.isConnected) {
-        quickActionViews.delete(view);
-        continue;
-      }
-      view.label.textContent = getQuickActionLabel(view);
-      view.moreButton?.setAttribute("aria-label", t("download_mode"));
-      if (view.optionButtons) {
-        const labels = {
-          zip: t("download_zip"),
-          manager: t("direct_idm_fdm"),
-          copy: t("copy_hd_links"),
-          comments: t("harvest_comments")
-        };
-        for (const option of view.optionButtons) option.textContent = labels[option.dataset.mode];
-      }
+      uiManager.updatePillLabels(view.host, {
+        label: getQuickActionLabel(view),
+        moreAria: t("download_mode"),
+        defaultAction: getDefaultQuickActionMode(view.pureVideo),
+        iconType: view.pureVideo ? "video" : "download",
+        menuOptions: [
+          ["zip", t("download_zip")],
+          ["manager", t("direct_idm_fdm")],
+          ["copy", t("copy_hd_links")],
+          ["comments", t("harvest_comments")]
+        ]
+      });
+    }
+  }
+
+  function cleanupDetachedQuickActions() {
+    for (const view of quickActionViews) {
+      if (view.host.isConnected) continue;
+      uiManager.cleanupElement(view.host);
+      quickActionViews.delete(view);
     }
   }
 
   function ensureMainWorldBridge() {
     if (document.getElementById("fbis-main-world-bridge")) return;
-    const script = document.createElement("script");
-    script.id = "fbis-main-world-bridge";
-    script.src = chrome.runtime.getURL("src/injected.js");
-    script.async = false;
-    script.addEventListener("load", () => script.remove(), { once: true });
-    (document.head || document.documentElement).appendChild(script);
+    if (document.getElementById("fbis-main-world-constants")) return;
+    const constantsScript = document.createElement("script");
+    constantsScript.id = "fbis-main-world-constants";
+    constantsScript.src = chrome.runtime.getURL("src/constants.js");
+    constantsScript.async = false;
+    constantsScript.addEventListener("load", () => {
+      constantsScript.remove();
+      if (document.getElementById("fbis-main-world-bridge")) return;
+      const script = document.createElement("script");
+      script.id = "fbis-main-world-bridge";
+      script.src = chrome.runtime.getURL("src/injected.js");
+      script.async = false;
+      script.addEventListener("load", () => script.remove(), { once: true });
+      (document.head || document.documentElement).appendChild(script);
+    }, { once: true });
+    (document.head || document.documentElement).appendChild(constantsScript);
   }
 
-  function requestMainBridge(type, payload = {}, timeout = 2500) {
+  function requestMainBridge(type, payload = {}, timeout = TIMINGS.BRIDGE_TIMEOUT_MS) {
     const requestId = `fbis-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     return new Promise((resolve, reject) => {
       const timer = window.setTimeout(() => {
@@ -336,7 +379,7 @@
         const message = event.data;
         if (
           event.source !== window ||
-          message?.source !== "FBIS_MAIN" ||
+          message?.source !== MESSAGE_SOURCES.MAIN ||
           message.requestId !== requestId ||
           message.type !== `${type}_RESULT`
         ) {
@@ -349,7 +392,7 @@
       }
 
       window.addEventListener("message", handleMessage);
-      window.postMessage({ source: "FBIS_CONTENT", type, requestId, ...payload }, "*");
+      window.postMessage({ source: MESSAGE_SOURCES.CONTENT, type, requestId, ...payload }, "*");
     });
   }
 
@@ -357,133 +400,60 @@
     let timer = 0;
     const scan = () => {
       timer = 0;
-      for (const post of document.querySelectorAll('div[role="article"]')) {
-        if (post.parentElement?.closest?.('div[role="article"]')) continue;
+      cleanupDetachedQuickActions();
+      for (const post of document.querySelectorAll(SELECTORS.POST.ARTICLE)) {
+        if (post.parentElement?.closest?.(SELECTORS.POST.ARTICLE)) continue;
         installQuickAction(post);
       }
     };
     const schedule = () => {
       if (timer) window.clearTimeout(timer);
-      timer = window.setTimeout(scan, 150);
+      timer = window.setTimeout(scan, TIMINGS.OBSERVER_DEBOUNCE_MS);
     };
     new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
     schedule();
   }
 
   function installQuickAction(post) {
-    if (!post?.isConnected || post.querySelector('[data-fbis-quick-action="1"]')) return;
+    if (!post?.isConnected || post.querySelector(SELECTORS.POST.QUICK_ACTION)) return;
     const links = Collector.getPostPhotoLinks(post);
     const videoRefs = Collector.getPostVideoRefs(post);
     if (links.length === 0 && videoRefs.length === 0) return;
 
     const countInfo = Collector.estimateExpectedCount(post);
-    const mediaContainer = links[0]?.parentElement || videoRefs[0]?.element?.parentElement || post;
     const estimatedImages = links.length > 0 ? (countInfo.expected || links.length) : 0;
     const estimatedVideos = videoRefs.length;
     const pureVideo = estimatedImages === 0 && estimatedVideos > 0;
-    const host = document.createElement("span");
-    host.dataset.fbisQuickAction = "1";
-    host.style.cssText = "position:absolute;top:8px;right:8px;z-index:20;display:block;";
-    if (getComputedStyle(mediaContainer).position === "static") {
-      mediaContainer.style.position = "relative";
-    }
-    const root = host.attachShadow({ mode: "closed" });
-    const style = document.createElement("style");
-    style.textContent = `
-      :host{all:initial}.wrap{position:relative;display:inline-flex;align-items:stretch;filter:drop-shadow(0 4px 16px rgba(0,0,0,.28))}.q,.more{border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.72);color:#fff;font:700 12px/1 system-ui,-apple-system,"Segoe UI",sans-serif;opacity:.64;cursor:pointer;transition:opacity .15s ease,transform .15s ease,background .15s ease}.q{display:inline-flex;align-items:center;gap:7px;border-radius:20px 0 0 20px;padding:7px 10px 7px 11px;border-right:0}.more{width:30px;border-radius:0 20px 20px 0;padding:0}.q:hover,.q:focus-visible,.more:hover,.more:focus-visible{opacity:1;background:rgba(0,0,0,.86)}.q:active,.more:active{transform:translateY(1px)}.q:disabled,.more:disabled,.menu button:disabled{cursor:progress;opacity:.72}.i{width:15px;height:15px;display:grid;place-items:center}.spin{animation:s .8s linear infinite}@keyframes s{to{transform:rotate(360deg)}}.done{color:#62d58b}.menu{position:absolute;top:calc(100% + 6px);right:0;min-width:190px;padding:5px;border:1px solid rgba(255,255,255,.16);border-radius:11px;background:rgba(20,20,22,.97);box-shadow:0 10px 28px rgba(0,0,0,.42);z-index:3}.menu[hidden]{display:none}.menu button{display:block;width:100%;border:0;border-radius:8px;padding:9px 10px;background:transparent;color:#fff;text-align:left;font:600 12px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;cursor:pointer}.menu button:hover,.menu button:focus-visible{background:rgba(255,255,255,.1)}.toast{position:absolute;right:0;top:calc(100% + 8px);max-width:240px;padding:7px 10px;border-radius:9px;background:rgba(18,18,20,.96);color:#fff;font:600 11px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;opacity:0;transform:translateY(-3px);pointer-events:none;transition:opacity .15s ease,transform .15s ease;z-index:4}.toast.show{opacity:1;transform:translateY(0)}`;
-    const wrap = document.createElement("span");
-    wrap.className = "wrap";
-    const button = document.createElement("button");
-    button.className = "q";
-    button.type = "button";
-    const icon = document.createElement("span");
-    icon.className = "i";
-    icon.textContent = pureVideo ? "▶" : "⇩";
-    const label = document.createElement("span");
-    const quickView = { host, label, pureVideo, estimatedImages, estimatedVideos };
-    label.textContent = getQuickActionLabel(quickView);
-    button.append(icon, label);
-    const moreButton = document.createElement("button");
-    moreButton.className = "more";
-    moreButton.type = "button";
-    moreButton.setAttribute("aria-label", t("download_mode"));
-    moreButton.textContent = "▾";
-    const menu = document.createElement("div");
-    menu.className = "menu";
-    menu.hidden = true;
-    const menuOptions = [
-      ["zip", t("download_zip")],
-      ["manager", t("direct_idm_fdm")],
-      ["copy", t("copy_hd_links")],
-      ["comments", t("harvest_comments")]
-    ];
-    const optionButtons = menuOptions.map(([mode, text]) => {
-      const option = document.createElement("button");
-      option.type = "button";
-      option.dataset.mode = mode;
-      option.textContent = text;
-      menu.appendChild(option);
-      return option;
-    });
-    const toast = document.createElement("span");
-    toast.className = "toast";
-    wrap.append(button, moreButton, menu, toast);
-    root.append(style, wrap);
-    mediaContainer.appendChild(host);
-    quickView.moreButton = moreButton;
-    quickView.optionButtons = optionButtons;
+    const totalMedia = estimatedImages + estimatedVideos;
+    const host = uiManager.renderFloatingPill(post, totalMedia, (mode, pillElement) =>
+      runQuickAction(post, mode, pillElement)
+    );
+    if (!host) return;
+    const quickView = { host, pureVideo, estimatedImages, estimatedVideos };
     quickActionViews.add(quickView);
-
-    moreButton.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (!state.quickActionBusy.has(post)) menu.hidden = !menu.hidden;
+    uiManager.updatePillLabels(host, {
+      label: getQuickActionLabel(quickView),
+      moreAria: t("download_mode"),
+      defaultAction: getDefaultQuickActionMode(pureVideo),
+      iconType: pureVideo ? "video" : "download",
+      menuOptions: [
+        ["zip", t("download_zip")],
+        ["manager", t("direct_idm_fdm")],
+        ["copy", t("copy_hd_links")],
+        ["comments", t("harvest_comments")]
+      ]
     });
-
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      runQuickAction(post, getDefaultQuickActionMode(pureVideo), {
-        button,
-        moreButton,
-        optionButtons,
-        menu,
-        icon,
-        label,
-        toast
-      });
-    });
-
-    for (const option of optionButtons) {
-      option.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        runQuickAction(post, option.dataset.mode, {
-          button,
-          moreButton,
-          optionButtons,
-          menu,
-          icon,
-          label,
-          toast
-        });
-      });
-    }
   }
 
-  async function runQuickAction(post, mode, ui) {
+  async function runQuickAction(post, mode, pillElement) {
     if (state.quickActionBusy.has(post)) return;
     state.quickActionBusy.add(post);
-    ui.menu.hidden = true;
-    ui.button.disabled = true;
-    ui.moreButton.disabled = true;
-    for (const option of ui.optionButtons) option.disabled = true;
-    ui.icon.classList.remove("done");
-    ui.icon.classList.add("spin");
-    ui.icon.textContent = "↻";
+    uiManager.updatePillState(pillElement, t("resolving_links"), "loading");
 
     try {
-      const media = await resolveQuickMedia(post, (text) => { ui.label.textContent = text; });
+      const media = await resolveQuickMedia(post, (text) => {
+        uiManager.updatePillState(pillElement, text, "loading");
+      });
       const metadata = Collector.extractPostMetadata(post, location.href);
       const totalMedia = media.images.length + media.videos.length;
       let successText;
@@ -492,49 +462,59 @@
         const comments = Collector.collectCommentMedia(post);
         const commentCount = comments.reduce((sum, comment) => sum + comment.media.length, 0);
         if (commentCount === 0) throw new Error(t("no_comment_media"));
-        ui.label.textContent = t("harvesting_comments", { count: commentCount });
+        uiManager.updatePillState(
+          pillElement,
+          t("harvesting_comments", { count: commentCount }),
+          "loading"
+        );
         await createAndDownloadZip({ ...media, comments }, metadata, (done, total) => {
-          ui.label.textContent = t("zipping_progress", { done, total });
+          uiManager.updatePillState(
+            pillElement,
+            t("zipping_progress", { done, total }),
+            "loading"
+          );
         });
         successText = t("harvested_comments", { count: commentCount });
       } else if (mode === "video") {
         if (media.videos.length === 0) throw new Error(t("no_hd_video"));
-        ui.label.textContent = t("sending_hd_video");
+        uiManager.updatePillState(pillElement, t("sending_hd_video"), "loading");
         await downloadVideosDirect(media.videos, metadata);
         successText = media.videos.length === 1
           ? t("started_hd_video")
           : t("sent_videos", { count: media.videos.length });
       } else if (mode === "manager") {
-        ui.label.textContent = t("sending_manager", { count: totalMedia });
+        uiManager.updatePillState(
+          pillElement,
+          t("sending_manager", { count: totalMedia }),
+          "loading"
+        );
         await downloadThroughManager(media, metadata);
         successText = t("sent_links", { count: totalMedia });
       } else if (mode === "copy") {
         await copyHdLinks(media);
         successText = t("copied_links", { count: totalMedia });
-        showQuickToast(ui.toast, t("toast_copied"));
+        uiManager.showToast(t("toast_copied"), "success");
       } else {
         await createAndDownloadZip(media, metadata, (done, total) => {
-          ui.label.textContent = t("zipping_progress", { done, total });
+          uiManager.updatePillState(
+            pillElement,
+            t("zipping_progress", { done, total }),
+            "loading"
+          );
         });
         successText = media.videos.length > 0
           ? t("processed_mixed", { photos: media.images.length, videos: media.videos.length })
           : t("downloaded_zip", { count: media.images.length });
       }
 
-      ui.icon.classList.remove("spin");
-      ui.icon.classList.add("done");
-      ui.icon.textContent = "✓";
-      ui.label.textContent = successText;
+      uiManager.updatePillState(pillElement, successText, "done");
     } catch (error) {
       DiagnosticLogger?.error("content", `QUICK_ACTION_FAILED ${error instanceof Error ? error.message : "unknown"}`);
-      ui.icon.classList.remove("spin");
-      ui.icon.textContent = "!";
-      ui.label.textContent = error instanceof Error ? error.message : t("quick_download_failed");
+      const message = error instanceof Error ? error.message : t("quick_download_failed");
+      uiManager.updatePillState(pillElement, message, "error");
+      uiManager.showToast(message, "error");
     } finally {
       state.quickActionBusy.delete(post);
-      ui.button.disabled = false;
-      ui.moreButton.disabled = false;
-      for (const option of ui.optionButtons) option.disabled = false;
     }
   }
 
@@ -544,7 +524,7 @@
     const results = [];
     if (media.images.length > 0) {
       const response = await chrome.runtime.sendMessage({
-        type: "FBIS_DOWNLOAD_IMAGES",
+        type: IPC_ACTIONS.DOWNLOAD_IMAGES,
         albumId: postId,
         postId,
         author: context.author || "Facebook",
@@ -564,7 +544,7 @@
   async function downloadVideosDirect(videos, metadata = {}) {
     const context = typeof metadata === "string" ? { postId: metadata } : metadata;
     const response = await chrome.runtime.sendMessage({
-      type: "FBIS_DOWNLOAD_VIDEOS",
+      type: IPC_ACTIONS.DOWNLOAD_VIDEOS,
       postId: context.postId || "unknown",
       author: context.author || "Facebook",
       videos: videos.map(({ url, filename }) => ({ url, filename }))
@@ -596,12 +576,6 @@
     if (!copied) throw new Error(t("clipboard_rejected"));
   }
 
-  function showQuickToast(toast, message) {
-    toast.textContent = message;
-    toast.classList.add("show");
-    window.setTimeout(() => toast.classList.remove("show"), 1800);
-  }
-
   async function resolveQuickMedia(post, onStatus) {
     const photoLinks = Collector.getPostPhotoLinks(post);
     const videoRefs = Collector.getPostVideoRefs(post);
@@ -622,7 +596,7 @@
     let relayImages = [];
     let relayVideos = [];
     try {
-      const relay = await requestMainBridge("FBIS_RESOLVE_POST", { postId: metadata.postId }, 2500);
+      const relay = await requestMainBridge(IPC_ACTIONS.RESOLVE_POST, { postId: metadata.postId });
       relayImages = Array.isArray(relay.images) ? relay.images : [];
       relayVideos = Array.isArray(relay.videos) ? relay.videos : [];
     } catch {
@@ -662,7 +636,9 @@
       return { images: result.images, videos };
     } finally {
       closePhotoViewer(returnUrl);
-      await new Promise((resolve) => window.setTimeout(resolve, 120));
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, TIMINGS.COLLECTOR_POLL_INTERVAL_MS)
+      );
       document.documentElement.classList.remove("fbis-silent-scan");
     }
   }
@@ -670,12 +646,12 @@
   function closePhotoViewer(returnUrl) {
     if (!Collector.isPhotoViewerLocation(location.href)) return;
     const viewerScope = Collector.findActiveViewerScope(document, window);
-    const searchRoot = viewerScope?.closest?.('[role="dialog"]') || viewerScope?.parentElement || document;
-    const closeControl = Array.from(searchRoot.querySelectorAll?.("[aria-label]") || []).find((element) => {
+    const searchRoot = viewerScope?.closest?.(SELECTORS.MODAL.DIALOG) || viewerScope?.parentElement || document;
+    const closeControl = Array.from(searchRoot.querySelectorAll?.(SELECTORS.CONTROLS.LABELLED) || []).find((element) => {
       const label = String(element.getAttribute("aria-label") || "");
       return /(?:close|đóng|quay\s+lại|back|fermer|schließen|cerrar|chiudi|关闭|閉じる|닫기)/i.test(label);
     });
-    const clickable = closeControl?.closest?.('button, [role="button"], a') || closeControl;
+    const clickable = closeControl?.closest?.(SELECTORS.CONTROLS.CLICKABLE_OR_LINK) || closeControl;
     if (clickable?.click) {
       clickable.click();
     } else if (returnUrl && location.href !== returnUrl) {
@@ -685,7 +661,7 @@
 
   function collectRenderedImages(post) {
     const images = [];
-    for (const image of post.querySelectorAll("img")) {
+    for (const image of post.querySelectorAll(SELECTORS.MEDIA.IMAGE)) {
       if (Collector.isInExcludedPostSubtree(image, post)) continue;
       const rect = image.getBoundingClientRect();
       if (rect.width < 120 || rect.height < 90) continue;
@@ -1031,10 +1007,11 @@
   }
 
   function syncGallerySelection() {
-    for (const checkbox of elements.gallery.querySelectorAll('input[type="checkbox"]')) {
+    for (const rawCheckbox of elements.gallery.querySelectorAll('input[type="checkbox"]')) {
+      const checkbox = /** @type {HTMLInputElement} */ (rawCheckbox);
       const index = Number(checkbox.dataset.index);
       checkbox.checked = state.selectedIndexes.has(index);
-      checkbox.closest(".image-card").classList.toggle("is-selected", checkbox.checked);
+      checkbox.closest(".image-card")?.classList.toggle("is-selected", checkbox.checked);
     }
     updateSelectedCount();
   }
@@ -1085,7 +1062,7 @@
       elements.progressFill.style.width = "100%";
       elements.progressTitle.textContent = t("zip_started");
       setStatus(
-        contentSettings.fbis_include_post_info
+        contentSettings[STORAGE_KEYS.INCLUDE_POST_INFO]
           ? t("packaged_with_info", { count: images.length })
           : t("packaged_photos", { count: images.length }),
         t("image_count", { count: images.length })
@@ -1100,7 +1077,17 @@
     }
   }
 
-  async function createAndDownloadZip(mediaOrImages, metadata, onProgress = () => undefined) {
+  /**
+   * @param {*} mediaOrImages
+   * @param {*} metadata
+   * @param {(processed: number, total: number) => void} [onProgress]
+   * @returns {Promise<void>}
+   */
+  async function createAndDownloadZip(
+    mediaOrImages,
+    metadata,
+    onProgress = (_processed, _total) => undefined
+  ) {
     const media = Array.isArray(mediaOrImages)
       ? { images: mediaOrImages, videos: [] }
       : {
@@ -1116,8 +1103,8 @@
     let completed = 0;
     const commentMediaCount = comments.reduce((sum, comment) => sum + comment.media.length, 0);
     const total = images.length + videos.length + commentMediaCount;
-    for (let start = 0; start < images.length; start += 5) {
-      const batch = images.slice(start, start + 5);
+    for (let start = 0; start < images.length; start += LIMITS.MAX_CONCURRENT_FETCH) {
+      const batch = images.slice(start, start + LIMITS.MAX_CONCURRENT_FETCH);
       const mediaItems = await fetchMediaBatchFromBackground(batch.map((image) => image.url));
       for (let offset = 0; offset < mediaItems.length; offset += 1) {
         const index = start + offset;
@@ -1150,8 +1137,8 @@
       const commentImages = comment.media.filter((item) => item.type === "image");
       const commentVideos = comment.media.filter((item) => item.type === "video");
 
-      for (let start = 0; start < commentImages.length; start += 5) {
-        const batch = commentImages.slice(start, start + 5);
+      for (let start = 0; start < commentImages.length; start += LIMITS.MAX_CONCURRENT_FETCH) {
+        const batch = commentImages.slice(start, start + LIMITS.MAX_CONCURRENT_FETCH);
         const mediaItems = await fetchMediaBatchFromBackground(batch.map((item) => item.url));
         for (let offset = 0; offset < mediaItems.length; offset += 1) {
           const source = batch[offset];
@@ -1187,7 +1174,7 @@
       }
     }
 
-    if (contentSettings.fbis_include_post_info) {
+    if (contentSettings[STORAGE_KEYS.INCLUDE_POST_INFO]) {
       writer.add(
         "post_info.txt",
         Zip.strToU8(formatPostInfo(metadata, images.length, videos, comments))
@@ -1199,7 +1186,7 @@
 
     try {
       const response = await chrome.runtime.sendMessage({
-        type: "FBIS_DOWNLOAD_ZIP",
+        type: IPC_ACTIONS.DOWNLOAD_ZIP,
         url: blobUrl,
         filename
       });
@@ -1259,7 +1246,7 @@
   }
 
   function buildMediaFilename(metadata, index, extension) {
-    const stem = Naming.parseFilenameTemplate(contentSettings.fbis_filename_template, {
+    const stem = Naming.parseFilenameTemplate(contentSettings[STORAGE_KEYS.FILENAME_TEMPLATE], {
       author: metadata?.author || "Facebook",
       postId: metadata?.postId || "unknown",
       index
@@ -1269,7 +1256,7 @@
 
   async function fetchMediaBatchFromBackground(urls) {
     const response = await chrome.runtime.sendMessage({
-      type: "FBIS_FETCH_MEDIA_BATCH",
+      type: IPC_ACTIONS.FETCH_MEDIA_BATCH,
       urls
     });
     if (!response?.ok || !Array.isArray(response.items) || response.items.length !== urls.length) {
@@ -1283,7 +1270,7 @@
 
   async function fetchSmallVideoForZip(url) {
     const response = await chrome.runtime.sendMessage({
-      type: "FBIS_FETCH_SMALL_VIDEO",
+      type: IPC_ACTIONS.FETCH_SMALL_VIDEO,
       url
     });
     if (!response?.ok) {
@@ -1394,7 +1381,10 @@
     elements.progressFill.style.width = "100%";
     elements.progressFill.classList.add("is-error");
     setStatus(message, t("error"));
-    window.setTimeout(() => elements.progressFill.classList.remove("is-error"), 2500);
+    window.setTimeout(
+      () => elements.progressFill.classList.remove("is-error"),
+      TIMINGS.UI_ERROR_FEEDBACK_MS
+    );
   }
 
   function formatProgress(found, expected = state.expectedCount) {

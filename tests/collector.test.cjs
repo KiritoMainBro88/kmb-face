@@ -334,6 +334,7 @@ test("collector waits briefly when Facebook mounts the Next control late", async
 });
 
 test("ArrowRight keyboard fallback dispatches a bubbling keydown", () => {
+  /** @type {any} */
   let dispatched = null;
   class FakeKeyboardEvent {
     constructor(type, init) {

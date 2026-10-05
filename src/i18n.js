@@ -1,6 +1,9 @@
-(function initializeI18n(globalScope) {
+(function initializeI18n(/** @type {any} */ globalScope) {
   "use strict";
 
+  const Constants = globalScope.FBISConstants ||
+    (typeof require === "function" ? require("./constants.js") : null);
+  const STORAGE_KEYS = Constants?.STORAGE_KEYS || { LANGUAGE: "fbis_language" };
   const DEFAULT_LANGUAGE = "auto";
   const SUPPORTED_LANGUAGES = new Set(["auto", "vi", "en"]);
   const DICTIONARIES = Object.freeze({
@@ -266,61 +269,100 @@
     })
   });
 
+  /** @type {'auto'|'vi'|'en'} */
   let preference = DEFAULT_LANGUAGE;
+  /** @type {'vi'|'en'} */
   let currentLanguage = detectLanguage(globalScope.navigator?.language);
 
+  /** @param {*} value @returns {'auto'|'vi'|'en'} */
   function normalizeLanguagePreference(value) {
     const normalized = String(value || DEFAULT_LANGUAGE).toLowerCase();
-    return SUPPORTED_LANGUAGES.has(normalized) ? normalized : DEFAULT_LANGUAGE;
+    return /** @type {'auto'|'vi'|'en'} */ (
+      SUPPORTED_LANGUAGES.has(normalized) ? normalized : DEFAULT_LANGUAGE
+    );
   }
 
+  /** @param {*} locale @returns {'vi'|'en'} */
   function detectLanguage(locale) {
     return /^vi(?:-|_|$)/i.test(String(locale || "")) ? "vi" : "en";
   }
 
+  /**
+   * @param {*} [value=preference]
+   * @param {*} [locale=globalScope.navigator?.language]
+   * @returns {'vi'|'en'}
+   */
   function resolveLanguage(value = preference, locale = globalScope.navigator?.language) {
     const normalized = normalizeLanguagePreference(value);
     return normalized === "auto" ? detectLanguage(locale) : normalized;
   }
 
+  /**
+   * @param {*} value
+   * @param {*} [locale=globalScope.navigator?.language]
+   * @returns {'vi'|'en'}
+   */
   function setPreference(value, locale = globalScope.navigator?.language) {
     preference = normalizeLanguagePreference(value);
     currentLanguage = resolveLanguage(preference, locale);
     return currentLanguage;
   }
 
+  /**
+   * @param {*} template
+   * @param {Record<string, *>} [params={}]
+   * @returns {string}
+   */
   function interpolate(template, params = {}) {
     return String(template).replace(/\{([A-Za-z0-9_]+)\}/g, (match, key) =>
       Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match
     );
   }
 
+  /**
+   * @param {string} key
+   * @param {Record<string, *>} [params={}]
+   * @returns {string}
+   */
   function t(key, params = {}) {
     const primary = DICTIONARIES[currentLanguage] || DICTIONARIES.en;
     const template = primary[key] ?? DICTIONARIES.en[key] ?? DICTIONARIES.vi[key] ?? key;
     return interpolate(template, params);
   }
 
+  /** @returns {Promise<'vi'|'en'>} */
   async function initialize() {
     if (!globalScope.chrome?.storage?.local) {
       setPreference(preference);
       return currentLanguage;
     }
     try {
-      const stored = await globalScope.chrome.storage.local.get({ fbis_language: DEFAULT_LANGUAGE });
-      setPreference(stored.fbis_language);
+      const stored = await globalScope.chrome.storage.local.get({
+        [STORAGE_KEYS.LANGUAGE]: DEFAULT_LANGUAGE
+      });
+      setPreference(stored[STORAGE_KEYS.LANGUAGE]);
     } catch {
       setPreference(DEFAULT_LANGUAGE);
     }
     return currentLanguage;
   }
 
+  /** @returns {'vi'|'en'} */
+  function getLanguage() {
+    return currentLanguage;
+  }
+
+  /** @returns {'auto'|'vi'|'en'} */
+  function getPreference() {
+    return preference;
+  }
+
   const api = {
     DEFAULT_LANGUAGE,
     DICTIONARIES,
     detectLanguage,
-    getLanguage: () => currentLanguage,
-    getPreference: () => preference,
+    getLanguage,
+    getPreference,
     initialize,
     interpolate,
     normalizeLanguagePreference,

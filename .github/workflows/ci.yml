@@ -22,6 +22,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install development dependencies
+        run: npm ci
 
       - name: Syntax check
         shell: bash
@@ -31,6 +35,9 @@ jobs:
             node --check "$file"
           done
           node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json OK')"
+
+      - name: Type check
+        run: npx -y tsc --noEmit
 
       - name: Unit tests
         run: node --test tests/*.test.cjs

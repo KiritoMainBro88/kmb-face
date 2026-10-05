@@ -4,7 +4,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 test("MAIN resolver prefers HD playable video and keeps it out of image results", () => {
+  /** @type {any} */
   let listener = null;
+  /** @type {any} */
   let result = null;
   const fakeWindow = {
     __FBIS_PAYLOAD_BRIDGE__: false,
@@ -18,8 +20,8 @@ test("MAIN resolver prefers HD playable video and keeps it out of image results"
   const hd = "https://video.fsgn1-1.fna.fbcdn.net/o1/v/t2/video.mp4?quality=hd";
   const sd = "https://video.fsgn1-1.fna.fbcdn.net/o1/v/t2/video.mp4?quality=sd";
   const image = "https://scontent.fsgn1-1.fna.fbcdn.net/v/t39/photo.jpg?oh=signed";
-  global.window = fakeWindow;
-  global.document = {
+  global.window = /** @type {any} */ (fakeWindow);
+  global.document = /** @type {any} */ ({
     scripts: [{
       textContent: JSON.stringify({
         post_id: "12345",
@@ -28,7 +30,7 @@ test("MAIN resolver prefers HD playable video and keeps it out of image results"
         image: { uri: image }
       })
     }]
-  };
+  });
 
   const modulePath = require.resolve("../src/injected.js");
   delete require.cache[modulePath];
@@ -50,7 +52,9 @@ test("MAIN resolver prefers HD playable video and keeps it out of image results"
 });
 
 test("Story resolver prefers HD video for the current story payload", () => {
+  /** @type {any} */
   let listener = null;
+  /** @type {any} */
   let result = null;
   const fakeWindow = {
     __FBIS_PAYLOAD_BRIDGE__: false,
@@ -63,8 +67,8 @@ test("Story resolver prefers HD video for the current story payload", () => {
   };
   const hd = "https://video.fsgn1-1.fna.fbcdn.net/o1/v/t2/story.mp4?quality=hd";
   const image = "https://scontent.fsgn1-1.fna.fbcdn.net/v/t39/story.jpg?oh=signed";
-  global.window = fakeWindow;
-  global.document = {
+  global.window = /** @type {any} */ (fakeWindow);
+  global.document = /** @type {any} */ ({
     scripts: [{
       textContent: JSON.stringify({
         story_id: "77777",
@@ -72,7 +76,7 @@ test("Story resolver prefers HD video for the current story payload", () => {
         image: { uri: image }
       })
     }]
-  };
+  });
 
   const modulePath = require.resolve("../src/injected.js");
   delete require.cache[modulePath];

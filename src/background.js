@@ -1,7 +1,7 @@
 "use strict";
 
 if (typeof importScripts === "function") {
-  importScripts("logger.js", "naming.js");
+  importScripts("constants.js", "logger.js", "naming.js");
 }
 
 const DiagnosticLogger = globalThis.FBISLogger || {
@@ -13,15 +13,12 @@ const DiagnosticLogger = globalThis.FBISLogger || {
 };
 const Naming = globalThis.FBISNaming ||
   (typeof require === "function" ? require("./naming.js") : null);
-
-const MAX_DOWNLOADS_PER_BATCH = 500;
-const MAX_MEDIA_FETCH_BATCH = 5;
-const MAX_VIDEO_ZIP_BYTES = 15 * 1024 * 1024;
-const MAX_URL_LENGTH = 8192;
-const ALLOWED_MEDIA_HOSTS = ["fbcdn.net", "facebook.com", "fbsbx.com"];
-const UPDATE_ALARM_NAME = "fbis_check_update";
-const UPDATE_INTERVAL_MINUTES = 12 * 60;
-const UPDATE_API_URL = "https://api.github.com/repos/KiritoMainBro88/kmb-face/releases/latest";
+const Constants = globalThis.FBISConstants ||
+  (typeof require === "function" ? require("./constants.js") : null);
+const { IPC_ACTIONS, LIMITS, MEDIA_HOSTS, STORAGE_KEYS, TIMINGS, UPDATE } = Constants;
+const UPDATE_ALARM_NAME = UPDATE.ALARM_NAME;
+const UPDATE_INTERVAL_MINUTES = TIMINGS.UPDATE_CHECK_INTERVAL_HOURS * 60;
+const UPDATE_API_URL = UPDATE.API_URL;
 
 function parseSemver(value) {
   const match = String(value || "").trim().match(
@@ -76,10 +73,14 @@ async function checkForUpdate() {
 
   const currentVersion = chrome.runtime.getManifest().version;
   const hasUpdate = semverCompare(latestVersion, currentVersion) > 0;
-  await chrome.storage.local.set({ hasUpdate, latestVersion, releaseUrl });
-  await chrome.action.setBadgeText({ text: hasUpdate ? "NEW" : "" });
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.HAS_UPDATE]: hasUpdate,
+    [STORAGE_KEYS.LATEST_VERSION]: latestVersion,
+    [STORAGE_KEYS.RELEASE_URL]: releaseUrl
+  });
+  await chrome.action.setBadgeText({ text: hasUpdate ? UPDATE.BADGE_TEXT : "" });
   if (hasUpdate) {
-    await chrome.action.setBadgeBackgroundColor({ color: "#E41E3F" });
+    await chrome.action.setBadgeBackgroundColor({ color: UPDATE.BADGE_COLOR });
   }
   return { hasUpdate, latestVersion, releaseUrl };
 }
@@ -130,7 +131,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   clearActionError(tab.id);
 
   try {
-    await chrome.tabs.sendMessage(tab.id, { type: "FBIS_TOGGLE_PANEL" });
+    await chrome.tabs.sendMessage(tab.id, { type: IPC_ACTIONS.TOGGLE_PANEL });
   } catch (error) {
     await showActionError(
       tab.id,
@@ -141,18 +142,18 @@ chrome.action.onClicked.addListener(async (tab) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type === "FBIS_LOG_EVENT") {
+  if (message?.type === IPC_ACTIONS.LOG_EVENT) {
     DiagnosticLogger.receive(message.entry);
     sendResponse({ ok: true });
     return false;
   }
 
-  if (message?.type === "FBIS_GET_DIAGNOSTIC_LOGS") {
+  if (message?.type === IPC_ACTIONS.GET_DIAGNOSTIC_LOGS || message?.type === IPC_ACTIONS.COPY_LOGS) {
     sendResponse({ ok: true, entries: DiagnosticLogger.getEntries() });
     return false;
   }
 
-  if (message?.type === "FBIS_FETCH_SMALL_VIDEO") {
+  if (message?.type === IPC_ACTIONS.FETCH_SMALL_VIDEO) {
     fetchSmallVideo(message, sender)
       .then(sendResponse)
       .catch((error) => {
@@ -165,7 +166,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message?.type === "FBIS_DOWNLOAD_VIDEOS") {
+  if (message?.type === IPC_ACTIONS.DOWNLOAD_VIDEOS) {
     downloadVideos(message, sender)
       .then(sendResponse)
       .catch((error) => {
@@ -180,7 +181,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message?.type === "FBIS_FETCH_MEDIA_BATCH") {
+  if (message?.type === IPC_ACTIONS.FETCH_MEDIA_BATCH) {
     fetchMediaBatch(message, sender)
       .then(sendResponse)
       .catch((error) => {
@@ -194,7 +195,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message?.type === "FBIS_DOWNLOAD_ZIP") {
+  if (message?.type === IPC_ACTIONS.DOWNLOAD_ZIP) {
     downloadZip(message, sender)
       .then(sendResponse)
       .catch((error) => {
@@ -204,7 +205,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message?.type !== "FBIS_DOWNLOAD_IMAGES") {
+  if (message?.type === IPC_ACTIONS.CHECK_UPDATE) {
+    runUpdateCheck().then((result) => sendResponse({ ok: Boolean(result), result }));
+    return true;
+  }
+
+  if (message?.type !== IPC_ACTIONS.DOWNLOAD_IMAGES) {
     return false;
   }
 
@@ -239,7 +245,7 @@ async function fetchSmallVideo(message, sender) {
   }
 
   const size = Number.parseInt(probe.headers.get("content-length") || "", 10);
-  if (!Number.isFinite(size) || size < 0 || size > MAX_VIDEO_ZIP_BYTES) {
+  if (!Number.isFinite(size) || size < 0 || size > LIMITS.MAX_INLINE_VIDEO_SIZE_BYTES) {
     return { ok: true, tooLarge: true, size: Number.isFinite(size) ? size : null };
   }
 
@@ -252,7 +258,7 @@ async function fetchSmallVideo(message, sender) {
     throw new Error(`Video HTTP ${response.status}.`);
   }
   const buffer = await response.arrayBuffer();
-  if (buffer.byteLength > MAX_VIDEO_ZIP_BYTES) {
+  if (buffer.byteLength > LIMITS.MAX_INLINE_VIDEO_SIZE_BYTES) {
     return { ok: true, tooLarge: true, size: buffer.byteLength };
   }
   return {
@@ -271,11 +277,11 @@ async function downloadVideos(message, sender) {
   if (!Array.isArray(message.videos) || message.videos.length === 0) {
     throw new Error("Danh sách video trống.");
   }
-  if (message.videos.length > 50) {
-    throw new Error("Mỗi lượt chỉ hỗ trợ tối đa 50 video.");
+  if (message.videos.length > LIMITS.MAX_VIDEOS_PER_BATCH) {
+    throw new Error(`Mỗi lượt chỉ hỗ trợ tối đa ${LIMITS.MAX_VIDEOS_PER_BATCH} video.`);
   }
 
-  const postId = sanitizeFilePart(message.postId || "unknown", 80);
+  const postId = sanitizeFilePart(message.postId || "unknown", LIMITS.MAX_FILE_PART_LENGTH);
   const author = message.author || "Facebook";
   const filenameTemplate = await getFilenameTemplate();
   const validated = message.videos.map((video, index) => validateVideo(video, index));
@@ -315,8 +321,8 @@ async function fetchMediaBatch(message, sender) {
   if (!Array.isArray(message.urls) || message.urls.length === 0) {
     throw new Error("Danh sách media trống.");
   }
-  if (message.urls.length > MAX_MEDIA_FETCH_BATCH) {
-    throw new Error(`Mỗi lượt chỉ fetch tối đa ${MAX_MEDIA_FETCH_BATCH} ảnh.`);
+  if (message.urls.length > LIMITS.MAX_CONCURRENT_FETCH) {
+    throw new Error(`Mỗi lượt chỉ fetch tối đa ${LIMITS.MAX_CONCURRENT_FETCH} ảnh.`);
   }
 
   const validated = message.urls.map((url, index) => validateImage({ url }, index));
@@ -375,7 +381,10 @@ async function downloadZip(message, sender) {
 function waitForDownloadCompletion(downloadId) {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const timeout = setTimeout(() => finish(new Error("Download ZIP chưa hoàn tất sau thời gian chờ.")), 300000);
+    const timeout = setTimeout(
+      () => finish(new Error("Download ZIP chưa hoàn tất sau thời gian chờ.")),
+      TIMINGS.DOWNLOAD_COMPLETION_TIMEOUT_MS
+    );
 
     function cleanup() {
       clearTimeout(timeout);
@@ -412,7 +421,7 @@ function sanitizeZipFilename(value) {
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 180);
+    .slice(0, LIMITS.MAX_FILENAME_TEMPLATE_LENGTH);
   return safe.toLowerCase().endsWith(".zip") ? safe : `${safe || "Facebook_Images"}.zip`;
 }
 
@@ -425,8 +434,8 @@ async function downloadBatch(message, sender) {
     throw new Error("Danh sách ảnh trống.");
   }
 
-  if (message.images.length > MAX_DOWNLOADS_PER_BATCH) {
-    throw new Error(`Mỗi lượt chỉ hỗ trợ tối đa ${MAX_DOWNLOADS_PER_BATCH} ảnh.`);
+  if (message.images.length > LIMITS.MAX_DOWNLOADS_PER_BATCH) {
+    throw new Error(`Mỗi lượt chỉ hỗ trợ tối đa ${LIMITS.MAX_DOWNLOADS_PER_BATCH} ảnh.`);
   }
 
   const validated = message.images.map((image, index) => validateImage(image, index));
@@ -468,7 +477,7 @@ async function downloadBatch(message, sender) {
     });
 
     if (index < validated.length - 1) {
-      await delay(80);
+      await delay(TIMINGS.DOWNLOAD_STAGGER_MS);
     }
   }
 
@@ -481,7 +490,7 @@ async function downloadBatch(message, sender) {
 }
 
 function validateImage(image, index) {
-  if (!image || typeof image.url !== "string" || image.url.length > MAX_URL_LENGTH) {
+  if (!image || typeof image.url !== "string" || image.url.length > LIMITS.MAX_URL_LENGTH) {
     throw new Error(`URL của ảnh #${index + 1} không hợp lệ.`);
   }
 
@@ -496,7 +505,7 @@ function validateImage(image, index) {
     parsed.protocol !== "https:" ||
     parsed.username ||
     parsed.password ||
-    !ALLOWED_MEDIA_HOSTS.some((host) => isHostOrSubdomain(parsed.hostname, host))
+    !MEDIA_HOSTS.some((host) => isHostOrSubdomain(parsed.hostname, host))
   ) {
     throw new Error(`Nguồn của ảnh #${index + 1} không được phép.`);
   }
@@ -508,7 +517,7 @@ function validateImage(image, index) {
 }
 
 function validateVideo(video, index) {
-  if (!video || typeof video.url !== "string" || video.url.length > MAX_URL_LENGTH) {
+  if (!video || typeof video.url !== "string" || video.url.length > LIMITS.MAX_URL_LENGTH) {
     throw new Error(`URL của video #${index + 1} không hợp lệ.`);
   }
 
@@ -523,7 +532,7 @@ function validateVideo(video, index) {
     parsed.protocol !== "https:" ||
     parsed.username ||
     parsed.password ||
-    !ALLOWED_MEDIA_HOSTS.some((host) => isHostOrSubdomain(parsed.hostname, host))
+    !MEDIA_HOSTS.some((host) => isHostOrSubdomain(parsed.hostname, host))
   ) {
     throw new Error(`Nguồn của video #${index + 1} không được phép.`);
   }
@@ -552,8 +561,8 @@ function sanitizeRelativeMediaFilename(value, extension) {
 async function getFilenameTemplate() {
   const fallback = Naming.DEFAULT_FILENAME_TEMPLATE;
   try {
-    const stored = await chrome.storage.local.get({ fbis_filename_template: fallback });
-    return Naming.normalizeFilenameTemplate(stored.fbis_filename_template);
+    const stored = await chrome.storage.local.get({ [STORAGE_KEYS.FILENAME_TEMPLATE]: fallback });
+    return Naming.normalizeFilenameTemplate(stored[STORAGE_KEYS.FILENAME_TEMPLATE]);
   } catch {
     return fallback;
   }
@@ -604,7 +613,7 @@ function isFacebookPage(url) {
 
 function sendDownloadProgress(tabId, progress) {
   chrome.tabs
-    .sendMessage(tabId, { type: "FBIS_DOWNLOAD_PROGRESS", ...progress })
+    .sendMessage(tabId, { type: IPC_ACTIONS.DOWNLOAD_PROGRESS, ...progress })
     .catch(() => undefined);
 }
 
